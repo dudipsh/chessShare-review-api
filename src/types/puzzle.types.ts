@@ -12,7 +12,9 @@ export type TacticalTheme =
   | 'trapped_piece'
   | 'winning_material'
   | 'mate_threat'
-  | 'zwischenzug';
+  | 'zwischenzug'
+  | 'smothered_mate'
+  | 'double_check';
 
 export interface TacticalThemeResult {
   theme: TacticalTheme | null;
@@ -82,7 +84,7 @@ export interface PuzzleExtractionResponse {
   totalExtracted: number;
 }
 
-// Legacy theme mapping
+// Legacy theme mapping (internal theme -> Lichess-style theme)
 export const LEGACY_THEME_MAPPING: Record<string, string> = {
   'fork': 'fork',
   'pin': 'pin',
@@ -94,6 +96,8 @@ export const LEGACY_THEME_MAPPING: Record<string, string> = {
   'winning_material': 'advantage',
   'mate_threat': 'mate',
   'zwischenzug': 'intermezzo',
+  'smothered_mate': 'smotheredMate',
+  'double_check': 'doubleCheck',
 };
 
 /**

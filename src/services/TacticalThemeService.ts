@@ -57,35 +57,47 @@ export class TacticalThemeService {
 
       // Check themes in order of priority/specificity
 
-      // 1. Check for back rank mate threats
+      // 1. Check for smothered mate (highest priority - rare and beautiful)
+      const smotheredResult = this._checkSmotheredMate(fenAfter, moveResult, playerColor);
+      if (smotheredResult.theme) return smotheredResult;
+
+      // 2. Check for back rank mate threats
       const backRankResult = this._checkBackRankMate(fen, fenAfter, moveResult, playerColor);
       if (backRankResult.theme) return backRankResult;
 
-      // 2. Check for discovered attack
+      // 3. Check for double check (very forcing)
+      const doubleCheckResult = this._checkDoubleCheck(fenAfter, moveResult);
+      if (doubleCheckResult.theme) return doubleCheckResult;
+
+      // 4. Check for discovered attack
       const discoveryResult = this._checkDiscoveredAttack(fen, fenAfter, movingPiece, from, to, playerColor);
       if (discoveryResult.theme) return discoveryResult;
 
-      // 3. Check for fork
+      // 5. Check for deflection/decoy
+      const deflectionResult = this._checkDeflection(fen, fenAfter, moveResult, playerColor);
+      if (deflectionResult.theme) return deflectionResult;
+
+      // 6. Check for fork
       const forkResult = this._checkFork(fenAfter, to, movingPiece, opponentColor);
       if (forkResult.theme) return forkResult;
 
-      // 4. Check for pin/skewer
+      // 7. Check for pin/skewer
       const pinResult = this._checkPinOrSkewer(fenAfter, to, movingPiece, opponentColor);
       if (pinResult.theme) return pinResult;
 
-      // 5. Check for trapped piece
+      // 8. Check for trapped piece
       const trappedResult = this._checkTrappedPiece(fen, fenAfter, moveResult, opponentColor);
       if (trappedResult.theme) return trappedResult;
 
-      // 6. Check for zwischenzug (in-between move)
+      // 9. Check for zwischenzug (in-between move)
       const zwischenzugResult = this._checkZwischenzug(fen, moveResult);
       if (zwischenzugResult.theme) return zwischenzugResult;
 
-      // 7. Check for general material gain
+      // 10. Check for general material gain
       const materialResult = this._checkMaterialGain(moveResult, evalBefore, evalAfter);
       if (materialResult.theme) return materialResult;
 
-      // 8. Check for mate threat
+      // 11. Check for mate threat
       const mateResult = this._checkMateThreat(fenAfter, evalAfter);
       if (mateResult.theme) return mateResult;
 
@@ -491,6 +503,182 @@ export class TacticalThemeService {
           confidence: 95,
           description: `Forced mate in ${movesToMate}`,
         };
+      }
+
+      return { theme: null, confidence: 0, description: '' };
+    } catch {
+      return { theme: null, confidence: 0, description: '' };
+    }
+  }
+
+  /**
+   * Check for smothered mate (knight delivers checkmate, king is trapped by own pieces)
+   */
+  private _checkSmotheredMate(
+    fenAfter: string,
+    move: ReturnType<Chess['move']>,
+    playerColor: Color
+  ): TacticalThemeResult {
+    if (!move || move.piece !== 'n') {
+      return { theme: null, confidence: 0, description: '' };
+    }
+
+    try {
+      const chess = new Chess(fenAfter);
+
+      // Must be checkmate
+      if (!chess.isCheckmate()) {
+        return { theme: null, confidence: 0, description: '' };
+      }
+
+      // Find the opponent's king
+      const opponentColor: Color = playerColor === 'w' ? 'b' : 'w';
+      const kingSquare = this._findKing(chess, opponentColor);
+      if (!kingSquare) {
+        return { theme: null, confidence: 0, description: '' };
+      }
+
+      // Check if king is surrounded by own pieces
+      const board = chess.board();
+      const kingFile = kingSquare.charCodeAt(0) - 'a'.charCodeAt(0);
+      const kingRank = 8 - parseInt(kingSquare[1]);
+
+      let surroundedByOwnPieces = 0;
+      const adjacentSquares = [
+        [kingFile - 1, kingRank - 1], [kingFile, kingRank - 1], [kingFile + 1, kingRank - 1],
+        [kingFile - 1, kingRank],                               [kingFile + 1, kingRank],
+        [kingFile - 1, kingRank + 1], [kingFile, kingRank + 1], [kingFile + 1, kingRank + 1],
+      ];
+
+      for (const [f, r] of adjacentSquares) {
+        if (f >= 0 && f < 8 && r >= 0 && r < 8) {
+          const piece = board[r][f];
+          if (piece && piece.color === opponentColor && piece.type !== 'k') {
+            surroundedByOwnPieces++;
+          }
+        }
+      }
+
+      // If at least 3 squares are blocked by own pieces, it's a smothered mate
+      if (surroundedByOwnPieces >= 3) {
+        return {
+          theme: 'smothered_mate',
+          confidence: 100,
+          description: 'Smothered mate',
+        };
+      }
+
+      return { theme: null, confidence: 0, description: '' };
+    } catch {
+      return { theme: null, confidence: 0, description: '' };
+    }
+  }
+
+  /**
+   * Check for double check (two pieces give check simultaneously)
+   */
+  private _checkDoubleCheck(
+    fenAfter: string,
+    move: ReturnType<Chess['move']>
+  ): TacticalThemeResult {
+    if (!move || !move.san.includes('+')) {
+      return { theme: null, confidence: 0, description: '' };
+    }
+
+    try {
+      const chess = new Chess(fenAfter);
+      if (!chess.inCheck()) {
+        return { theme: null, confidence: 0, description: '' };
+      }
+
+      // Count how many pieces are giving check
+      const opponentColor: Color = chess.turn();
+      const playerColor: Color = opponentColor === 'w' ? 'b' : 'w';
+      const kingSquare = this._findKing(chess, opponentColor);
+      if (!kingSquare) {
+        return { theme: null, confidence: 0, description: '' };
+      }
+
+      // Check if king is attacked by multiple pieces
+      const board = chess.board();
+      let attackingPieces = 0;
+
+      for (let rank = 0; rank < 8; rank++) {
+        for (let file = 0; file < 8; file++) {
+          const piece = board[rank][file];
+          if (piece && piece.color === playerColor) {
+            const square = `${String.fromCharCode('a'.charCodeAt(0) + file)}${8 - rank}` as Square;
+            const moves = chess.moves({ square, verbose: true });
+            // Check if this piece attacks the king's square
+            for (const m of moves) {
+              if (m.to === kingSquare || (m.captured && m.to === kingSquare)) {
+                attackingPieces++;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (attackingPieces >= 2) {
+        return {
+          theme: 'double_check',
+          confidence: 95,
+          description: 'Double check',
+        };
+      }
+
+      return { theme: null, confidence: 0, description: '' };
+    } catch {
+      return { theme: null, confidence: 0, description: '' };
+    }
+  }
+
+  /**
+   * Check for deflection/decoy (forcing a defensive piece away)
+   */
+  private _checkDeflection(
+    fenBefore: string,
+    fenAfter: string,
+    move: ReturnType<Chess['move']>,
+    playerColor: Color
+  ): TacticalThemeResult {
+    if (!move || !move.captured) {
+      return { theme: null, confidence: 0, description: '' };
+    }
+
+    try {
+      const chessBefore = new Chess(fenBefore);
+      const opponentColor: Color = playerColor === 'w' ? 'b' : 'w';
+
+      // Check if the captured piece was defending something valuable
+      const capturedSquare = move.to as Square;
+
+      // Simulate removing the captured piece and check what it was defending
+      const capturedPiece = chessBefore.get(capturedSquare);
+      if (!capturedPiece || capturedPiece.color !== opponentColor) {
+        return { theme: null, confidence: 0, description: '' };
+      }
+
+      // Get squares that were defended by the captured piece
+      const defendedSquares = chessBefore.moves({ square: capturedSquare, verbose: true })
+        .map(m => m.to);
+
+      // Check if any defended square has a valuable piece that's now attacked
+      const chessAfter = new Chess(fenAfter);
+      for (const sq of defendedSquares) {
+        const piece = chessAfter.get(sq as Square);
+        if (piece && piece.color === opponentColor) {
+          const pieceValue = PIECE_VALUES[piece.type];
+          // If the now-undefended piece is valuable (rook+), it's a deflection
+          if (pieceValue >= PIECE_VALUES.r || piece.type === 'k') {
+            return {
+              theme: 'deflection',
+              confidence: 80,
+              description: 'Deflection',
+            };
+          }
+        }
       }
 
       return { theme: null, confidence: 0, description: '' };

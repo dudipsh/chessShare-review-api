@@ -27,6 +27,77 @@ import {
   PIECE_VALUES,
 } from '../config/puzzleConstants.js';
 
+// ═══════════════════════════════════════════════════════════════════════
+// Tactical Theme Quality Filter
+// Only puzzles with these themes are interesting enough to include
+// ═══════════════════════════════════════════════════════════════════════
+
+// Valid tactical themes that make interesting puzzles (like Lichess)
+const VALID_TACTICAL_THEMES = [
+  // Tactical motifs
+  'fork', 'pin', 'skewer', 'discoveredAttack', 'doubleCheck', 'doubleAttack',
+  // Mating patterns
+  'backRankMate', 'smotheredMate', 'mateIn1', 'mateIn2', 'mateIn3', 'mate',
+  // Defensive/attacking motifs
+  'deflection', 'decoy', 'clearance', 'sacrifice', 'interference',
+  // Piece tactics
+  'trappedPiece', 'hangingPiece', 'overloaded', 'undermining',
+  // Special moves
+  'zwischenzug', 'quietMove', 'desperado', 'intermezzo',
+  // Pawn tactics
+  'promotion', 'advancedPawn', 'passedPawn',
+  // Discovery variations
+  'discovery',
+];
+
+// Generic themes that don't represent specific tactics
+const GENERIC_THEMES = ['advantage', 'crushing', 'endgame', 'equality', 'winning_material'];
+
+// Minimum material gain (in centipawns) for puzzles with generic themes
+const MIN_MATERIAL_FOR_GENERIC_THEME = 200; // 2 pawns worth
+
+// Whether to require tactical themes (can be disabled for testing)
+const REQUIRE_TACTICAL_THEME = true;
+
+/**
+ * Check if a theme is a valid tactical theme (not generic)
+ */
+function isValidTacticalTheme(theme: string | null | undefined): boolean {
+  if (!theme) return false;
+  return VALID_TACTICAL_THEMES.includes(theme);
+}
+
+/**
+ * Check if a puzzle should be included based on theme quality
+ */
+function shouldIncludePuzzle(
+  themeId: string | null | undefined,
+  materialGain: number,
+  isBlunder: boolean = false
+): boolean {
+  // Always include blunders (they're important to learn from)
+  if (isBlunder) return true;
+
+  // If we don't require tactical themes, include all
+  if (!REQUIRE_TACTICAL_THEME) return true;
+
+  // If has valid tactical theme, include
+  if (isValidTacticalTheme(themeId)) return true;
+
+  // If generic theme but has significant material gain, include
+  if (themeId && GENERIC_THEMES.includes(themeId)) {
+    return materialGain >= MIN_MATERIAL_FOR_GENERIC_THEME;
+  }
+
+  // If no theme at all but has significant material, include
+  if (!themeId && materialGain >= MIN_MATERIAL_FOR_GENERIC_THEME) {
+    return true;
+  }
+
+  // Otherwise, skip (boring puzzle)
+  return false;
+}
+
 export class PuzzleExtractionService {
   /**
    * Extract mistake puzzles from game evaluations
@@ -175,6 +246,12 @@ export class PuzzleExtractionService {
         ? convertLegacyTheme(themeResult.theme)
         : undefined;
 
+      // Quality filter: skip boring puzzles without tactical themes
+      // (unless they're blunders or have significant material gain)
+      if (!shouldIncludePuzzle(themeId, materialGain, isBlunder)) {
+        return;
+      }
+
       mistakes.push({
         fen: evaluation.fen,
         played_move: evaluation.move,
@@ -297,10 +374,16 @@ export class PuzzleExtractionService {
         return;
       }
 
-      // This is a missed tactic!
+      // Convert theme to new ID (don't default to 'advantage' - let filter decide)
       const themeId = themeResult.theme
         ? convertLegacyTheme(themeResult.theme)
-        : 'advantage';
+        : undefined;
+
+      // Quality filter: skip boring puzzles without tactical themes
+      // Missed tactics should have a real tactical theme to be interesting
+      if (!shouldIncludePuzzle(themeId, materialGain, false)) {
+        return;
+      }
 
       missedTactics.push({
         fen: evaluation.fen,
@@ -379,13 +462,24 @@ export class PuzzleExtractionService {
         evalBefore,
         evalAfter
       );
-      const themeId = themeResult?.theme || null;
+
+      // Convert theme to new ID
+      const themeId = themeResult?.theme
+        ? convertLegacyTheme(themeResult.theme)
+        : undefined;
 
       // Calculate material gain
       const materialGain = tacticalThemeService.calculateMaterialGain(
         evaluation.fen,
         playedMove
       );
+
+      // Quality filter for positive puzzles - but be more lenient
+      // since brilliant/great moves are already special
+      // Only filter if no tactical theme AND no significant material gain
+      if (!shouldIncludePuzzle(themeId, materialGain, false)) {
+        return;
+      }
 
       positivePuzzles.push({
         fen: evaluation.fen,
