@@ -17,25 +17,26 @@ export const PUZZLE_MAX_LOSING_EVAL = 200;
 export const PUZZLE_MAX_WINNING_EVAL = 600;
 
 // Maximum mistake puzzles per game
-// Generate 3-5 puzzles per game for better practice variety
-export const MAX_MISTAKE_PUZZLES_PER_GAME = 5;
+// Reduced to 3 for higher quality, faster generation
+export const MAX_MISTAKE_PUZZLES_PER_GAME = 3;
 
 // Maximum positive puzzles (brilliant/great moves) per game
-export const MAX_POSITIVE_PUZZLES_PER_GAME = 2;
+export const MAX_POSITIVE_PUZZLES_PER_GAME = 1;
 
 // Minimum puzzles to generate if possible
-export const MIN_PUZZLES_TARGET = 3;
+export const MIN_PUZZLES_TARGET = 2;
 
 // Minimum centipawn loss to create a puzzle (only significant mistakes)
-// 100cp = 1 pawn - only real mistakes, not small inaccuracies
-export const PUZZLE_MIN_CP_LOSS = 100;
+// 150cp = 1.5 pawns - only real mistakes worth learning from
+export const PUZZLE_MIN_CP_LOSS = 150;
 
 // Minimum move number to create puzzles (skip opening phase)
 // Opening mistakes are often theoretical, not tactical
 export const PUZZLE_MIN_MOVE_NUMBER = 6;
 
 // Maximum missed tactics puzzles per game
-export const MAX_MISSED_TACTICS_PER_GAME = 3;
+// Reduced to 2 for higher quality
+export const MAX_MISSED_TACTICS_PER_GAME = 2;
 
 // Minimum material gain for a tactic to be considered "puzzle-worthy" (centipawns)
 // 100cp = 1 pawn - must win at least a pawn
@@ -80,7 +81,8 @@ export const QUALITY_SCORE = {
 } as const;
 
 // Minimum quality score for a puzzle to be included
-export const MIN_QUALITY_SCORE = 50;
+// Increased to 60 for higher quality puzzles
+export const MIN_QUALITY_SCORE = 60;
 
 // ═══════════════════════════════════════════════════════════════════════
 // PIECE VALUES
