@@ -237,25 +237,73 @@ const UNIQUE_MOVE_THRESHOLD = 30;  // cp difference for "only move"
 
 ---
 
-## Database Schema
+## Database Schema (EXISTING - No Migration Needed)
+
+The following tables **already exist** in Supabase and should be used directly:
+
+### `personal_mistakes` (Main Puzzle Table)
 
 ```sql
-CREATE TABLE game_puzzles (
+-- Already exists! Key columns:
+personal_mistakes (
   id UUID PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id),
   game_review_id UUID REFERENCES game_reviews(id),
-  user_id UUID REFERENCES profiles(id),
   fen TEXT NOT NULL,
-  solution JSONB NOT NULL,  -- Array of moves
-  solution_san TEXT[],      -- Human readable
-  rating INTEGER,
-  themes TEXT[],
-  puzzle_type TEXT NOT NULL, -- 'mistake', 'missed_tactic', 'brilliant'
+  played_move TEXT,               -- The move player actually played
+  best_move TEXT NOT NULL,        -- The correct move (puzzle solution start)
+  solution_sequence JSONB,        -- Array of {move, isUserMove, fen}
+  evaluation_loss INTEGER,
+  marker_type TEXT,               -- 'blunder', 'mistake', 'miss', 'inaccuracy', 'brilliant', 'great'
   move_number INTEGER,
-  evaluation_swing INTEGER,
-  material_gain INTEGER,
-  quality_score INTEGER,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  player_color TEXT,              -- 'white' | 'black'
+  opening_name TEXT,
+  puzzle_rating INTEGER,          -- Estimated puzzle difficulty
+  game_rating INTEGER,            -- Player's rating in the game
+  is_positive_puzzle BOOLEAN,     -- true for brilliant/great moves
+  is_missed_tactic BOOLEAN,       -- true if player missed this tactic
+  tactical_theme TEXT,            -- 'fork', 'pin', etc.
+  material_gain INTEGER,          -- Centipawns gained by best move
+  source TEXT DEFAULT 'game',     -- 'game' | 'lichess'
+  lichess_puzzle_id TEXT,         -- For lichess imports
+  created_at TIMESTAMPTZ
 );
+```
+
+### `tactical_themes` (Theme Lookup)
+
+```sql
+-- Already exists! ~50 themes including:
+-- Motifs: fork, pin, skewer, discoveredAttack, doubleCheck, etc.
+-- Mates: backRankMate, smotheredMate, mateIn1, mateIn2, etc.
+-- Advanced: deflection, attraction, clearance, intermezzo, etc.
+```
+
+### Existing RPC Functions
+
+The API server should call these existing RPC functions:
+
+```typescript
+// Save puzzles after extraction
+await supabase.rpc('save_personal_mistakes', {
+  p_game_review_id: reviewId,
+  p_mistakes: puzzlesJson  // JSONB array
+});
+
+// Get puzzles for a game
+await supabase.rpc('get_mistakes_for_game', {
+  p_game_review_id: reviewId,
+  p_filter: 'all' | 'mistakes' | 'tactics',
+  p_limit: 50
+});
+
+// Update puzzle best move after deep analysis
+await supabase.rpc('update_puzzle_best_move', {
+  p_game_review_id: reviewId,
+  p_fen: fen,
+  p_best_move: bestMove,
+  p_solution_sequence: solutionSequence
+});
 ```
 
 ---
