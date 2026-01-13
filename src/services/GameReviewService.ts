@@ -289,11 +289,37 @@ export class GameReviewService {
 
   /**
    * Analyze a single position
+   * Handles game-over positions (checkmate/stalemate) gracefully
    */
   async analyzePosition(
     fen: string,
     options: { depth?: number } = {}
   ): Promise<StockfishAnalysis> {
+    // Check for game-over positions (checkmate, stalemate, insufficient material)
+    try {
+      const chess = new Chess(fen);
+      if (chess.isGameOver()) {
+        // Return a synthetic result for game-over positions
+        const isCheckmate = chess.isCheckmate();
+        const sideToMove = fen.split(' ')[1];
+
+        // In checkmate, the side to move loses (eval = -99999 for them)
+        // From White's perspective: Black to move and checkmated = +99999, White checkmated = -99999
+        const evaluation = isCheckmate
+          ? (sideToMove === 'w' ? -99999 : 99999)
+          : 0; // Stalemate/draw = 0
+
+        return {
+          evaluation,
+          bestMove: '',
+          depth: 0,
+          topMoves: [],
+        };
+      }
+    } catch (e) {
+      // If FEN parsing fails, continue with normal analysis
+    }
+
     const pool = getStockfishPool();
     if (!pool.initialized) {
       throw new Error('Stockfish pool is not initialized');

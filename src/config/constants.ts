@@ -21,16 +21,21 @@ export const ACCURACY_ADJUSTMENT = {
 
 /**
  * Move classification by centipawn loss (calibrated to Chess.com)
- * Chess.com NAGs: $1=!, $6=?!, $9=✖, $2=?, $4=??
+ * Chess.com NAGs: $1=!, $6=?!, $2=?, $4=??
+ *
+ * RECALIBRATED to match Chess.com's lenient scoring:
+ * - Chess.com is MUCH more lenient than Lichess
+ * - A 150cp loss is still often "Good" in Chess.com
+ * - Blunders require significant material loss (300+cp)
  */
 export const MOVE_CLASSIFICATION_THRESHOLDS = {
-  BEST: 10,       // 0-10cp = Best move ($1 !)
-  GREAT: 15,      // 10-15cp = Great move (checks, winning moves)
-  GOOD: 30,       // 15-30cp = Good move (no NAG in Chess.com)
-  INACCURACY: 50, // 30-50cp = Inaccuracy ($6 ?!)
-  MISS: 100,      // 50-100cp = Miss ($9 ✖) - tactical miss
-  MISTAKE: 150,   // 100-150cp = Mistake ($2 ?)
-  BLUNDER: 200,   // 200+cp = Blunder ($4 ??)
+  BEST: 15,        // 0-15cp = Best move ($1 !)
+  GREAT: 25,       // 15-25cp = Great move (checks, winning moves)
+  GOOD: 75,        // 25-75cp = Good move (no NAG in Chess.com)
+  INACCURACY: 125, // 75-125cp = Inaccuracy ($6 ?!)
+  MISS: 200,       // 125-200cp = Miss (tactical miss, part of ?!)
+  MISTAKE: 300,    // 200-300cp = Mistake ($2 ?)
+  BLUNDER: 300,    // 300+cp = Blunder ($4 ??)
 } as const;
 
 /**
@@ -210,6 +215,7 @@ export const PROGRESS_DELAYS = {
 
 /**
  * Get marker type by centipawn loss
+ * Calibrated to Chess.com's lenient scoring
  */
 export function getMarkerTypeByLoss(centipawnLoss: number): MarkerType {
   if (centipawnLoss <= MOVE_CLASSIFICATION_THRESHOLDS.BEST) {
@@ -221,8 +227,9 @@ export function getMarkerTypeByLoss(centipawnLoss: number): MarkerType {
   if (centipawnLoss <= MOVE_CLASSIFICATION_THRESHOLDS.INACCURACY) {
     return MarkerType.INACCURACY;
   }
+  // Chess.com doesn't have "MISS" - bundle with INACCURACY for 125-200cp
   if (centipawnLoss <= MOVE_CLASSIFICATION_THRESHOLDS.MISS) {
-    return MarkerType.MISS;
+    return MarkerType.INACCURACY; // Changed from MISS to INACCURACY
   }
   if (centipawnLoss <= MOVE_CLASSIFICATION_THRESHOLDS.MISTAKE) {
     return MarkerType.MISTAKE;
