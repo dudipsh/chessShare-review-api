@@ -331,12 +331,40 @@ export class GameReviewService {
 
   /**
    * Analyze with retry logic
+   * Handles game-over positions (checkmate/stalemate) gracefully
    */
   private async analyzeWithRetry(
     pool: ReturnType<typeof getStockfishPool>,
     fen: string,
     depth: number
   ): Promise<StockfishAnalysis> {
+    // Check for game-over positions (checkmate, stalemate, insufficient material)
+    try {
+      const chess = new Chess(fen);
+      if (chess.isGameOver()) {
+        const isCheckmate = chess.isCheckmate();
+        const sideToMove = fen.split(' ')[1];
+
+        // In checkmate, the side to move loses (eval = -99999 for them)
+        // From White's perspective: Black to move and checkmated = +99999, White checkmated = -99999
+        const evaluation = isCheckmate
+          ? (sideToMove === 'w' ? -99999 : 99999)
+          : 0; // Stalemate/draw = 0
+
+        reviewLogger.debug({ fen, isCheckmate }, 'Game-over position detected, returning synthetic result');
+
+        return {
+          evaluation,
+          bestMove: '',
+          depth: 0,
+          topMoves: [{ uci: '', cp: evaluation }], // Include a synthetic topMove to pass validation
+        };
+      }
+    } catch (e) {
+      // If FEN parsing fails, continue with normal analysis
+      reviewLogger.warn({ fen, error: e }, 'Failed to parse FEN for game-over check');
+    }
+
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= RETRY_CONFIG.MAX_RETRIES; attempt++) {
