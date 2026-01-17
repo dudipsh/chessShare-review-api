@@ -143,13 +143,22 @@ export const DEFAULT_GAME_REVIEW_CONFIG: GameReviewConfig = {
 
 /**
  * Parallel analysis configuration (server-optimized)
+ *
+ * Environment variables:
+ * - STOCKFISH_POOL_SIZE: Number of Stockfish workers (default: 6)
+ * - STOCKFISH_HASH_MB: Hash size per worker in MB (default: 256)
+ * - STOCKFISH_THREADS: Threads per worker (default: 1)
+ *
+ * Recommended for Railway Pro (8 vCPU, 8GB RAM):
+ * - STOCKFISH_POOL_SIZE=6, STOCKFISH_HASH_MB=256, STOCKFISH_THREADS=1
+ * - Uses ~2GB RAM (25%), 6 vCPU (75%)
  */
 export const PARALLEL_ANALYSIS_CONFIG = {
-  NUM_WORKERS: parseInt(process.env.STOCKFISH_POOL_SIZE || '4', 10),
+  NUM_WORKERS: parseInt(process.env.STOCKFISH_POOL_SIZE || '6', 10),
   DEPTH_COMPENSATION_PER_WORKER: 0,
   MOVETIME_COMPENSATION_PER_WORKER: 100,
-  HASH_SIZE_PER_WORKER: 64,
-  THREADS_PER_WORKER: 1,
+  HASH_SIZE_PER_WORKER: parseInt(process.env.STOCKFISH_HASH_MB || '256', 10),
+  THREADS_PER_WORKER: parseInt(process.env.STOCKFISH_THREADS || '1', 10),
 } as const;
 
 /**
