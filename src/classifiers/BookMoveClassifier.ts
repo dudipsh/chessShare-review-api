@@ -165,14 +165,9 @@ export class BookMoveClassifier {
         return { isBook: true, opening };
       }
 
-      // Check if position before was a known opening
-      const beforeKey = fen.split(' ').slice(0, 4).join(' ');
-      const openingBefore = FEN_TO_OPENING.get(beforeKey);
-
-      if (openingBefore) {
-        return { isBook: true, opening: openingBefore };
-      }
-
+      // ✅ FIXED: Only return book=true if the RESULTING position is in the database
+      // Just because we're in a known opening doesn't mean every move is a book move!
+      // Previously we incorrectly marked any move from a known position as "book"
       return { isBook: false, opening: null };
     } catch {
       return { isBook: false, opening: null };

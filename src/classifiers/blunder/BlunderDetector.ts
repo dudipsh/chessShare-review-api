@@ -35,6 +35,8 @@ export interface BlunderContext {
   mateInAfter?: number;
   /** Whether position was already lost */
   isAlreadyLost?: boolean;
+  /** Whether this is white's move (needed for still-winning leniency) */
+  isWhiteMove?: boolean;
 }
 
 export class BlunderDetector {
@@ -57,6 +59,7 @@ export class BlunderDetector {
       mateInBefore,
       mateInAfter,
       isAlreadyLost,
+      isWhiteMove,
     } = ctx;
 
     // Early rejection: Not enough loss for blunder
@@ -76,6 +79,12 @@ export class BlunderDetector {
 
     // Early rejection: Too early in game
     if (moveNumber !== undefined && moveNumber < BLUNDER_THRESHOLDS.MIN_MOVE_NUMBER) {
+      return { isBlunder: false, centipawnLoss };
+    }
+
+    // ✅ NEW: Early rejection: Position is STILL winning after the move
+    // Chess.com doesn't call it a blunder if you're still crushing
+    if (this._shouldSkipStillWinning(evalAfter, isWhiteMove)) {
       return { isBlunder: false, centipawnLoss };
     }
 
@@ -183,12 +192,30 @@ export class BlunderDetector {
    */
   private _shouldSkipAlreadyLost(evalBefore?: number, isAlreadyLost?: boolean): boolean {
     if (isAlreadyLost) return true;
-    
+
     if (evalBefore !== undefined && evalBefore <= BLUNDER_THRESHOLDS.ALREADY_LOST_THRESHOLD) {
       return true;
     }
-    
+
     return false;
+  }
+
+  /**
+   * ✅ NEW: Check if should skip blunder because position is STILL winning
+   * Chess.com style: if you're still crushing (+3 pawns), it's not a blunder
+   *
+   * @param evalAfter - Evaluation after the move (from White's perspective)
+   * @param isWhiteMove - Whether this is white's move
+   */
+  private _shouldSkipStillWinning(evalAfter?: number, isWhiteMove?: boolean): boolean {
+    if (!BLUNDER_THRESHOLDS.ENABLE_STILL_WINNING_LENIENCY) return false;
+    if (evalAfter === undefined || isWhiteMove === undefined) return false;
+
+    // Get eval from player's perspective
+    const playerEval = isWhiteMove ? evalAfter : -evalAfter;
+
+    // If player is still winning by a lot, don't call it a blunder
+    return playerEval >= BLUNDER_THRESHOLDS.STILL_WINNING_THRESHOLD;
   }
 
   /**

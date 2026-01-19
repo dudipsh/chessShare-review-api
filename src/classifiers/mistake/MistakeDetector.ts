@@ -41,6 +41,8 @@ export interface MistakeContext {
   isLosingPosition?: boolean;
   /** Mate-in count if applicable */
   mateIn?: number;
+  /** Whether this is white's move (needed for still-winning leniency) */
+  isWhiteMove?: boolean;
 }
 
 export class MistakeDetector {
@@ -66,6 +68,7 @@ export class MistakeDetector {
       wasCapturingBestMove,
       isLosingPosition,
       mateIn,
+      isWhiteMove,
     } = ctx;
 
     // Apply game phase forgiveness
@@ -88,6 +91,12 @@ export class MistakeDetector {
 
     // Early rejection: Too large for mistake (blunder)
     if (adjustedCpLoss >= MISTAKE_THRESHOLDS.MAX_CP_LOSS) {
+      return { isMistake: false, centipawnLoss };
+    }
+
+    // ✅ NEW: Early rejection: Position is STILL winning after the move
+    // Chess.com doesn't call it a mistake if you're still clearly winning
+    if (this._shouldSkipStillWinning(evalAfter, isWhiteMove)) {
       return { isMistake: false, centipawnLoss };
     }
 
@@ -228,16 +237,34 @@ export class MistakeDetector {
    * Check if should skip due to losing position
    */
   private _shouldSkipLosingPosition(
-    evalBefore?: number, 
+    evalBefore?: number,
     isLosingPosition?: boolean
   ): boolean {
     if (isLosingPosition) return true;
-    
+
     if (evalBefore !== undefined && evalBefore <= MISTAKE_THRESHOLDS.LOSING_POSITION_THRESHOLD) {
       return true;
     }
-    
+
     return false;
+  }
+
+  /**
+   * ✅ NEW: Check if should skip mistake because position is STILL winning
+   * Chess.com style: if you're still clearly winning (+2 pawns), it's not a mistake
+   *
+   * @param evalAfter - Evaluation after the move (from White's perspective)
+   * @param isWhiteMove - Whether this is white's move
+   */
+  private _shouldSkipStillWinning(evalAfter?: number, isWhiteMove?: boolean): boolean {
+    if (!MISTAKE_THRESHOLDS.ENABLE_STILL_WINNING_LENIENCY) return false;
+    if (evalAfter === undefined || isWhiteMove === undefined) return false;
+
+    // Get eval from player's perspective
+    const playerEval = isWhiteMove ? evalAfter : -evalAfter;
+
+    // If player is still winning by a lot, don't call it a mistake
+    return playerEval >= MISTAKE_THRESHOLDS.STILL_WINNING_THRESHOLD;
   }
 
   /**

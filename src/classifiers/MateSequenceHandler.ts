@@ -25,7 +25,47 @@ export class MateSequenceHandler {
     ctx: MateContext
   ): { markerType: MarkerType; centipawnLoss: number } | null {
     const { evalBefore, evalAfter, evalIfBestMove, isWhiteMove, fenBefore, playedMove } = ctx;
-    
+
+    // ⚠️ CRITICAL SAFETY CHECK: If player STILL has winning mate after move, NEVER mark as BLUNDER!
+    // M3 → M9 is at worst an INACCURACY, never a BLUNDER
+    if (EvaluationUtils.isMateScore(evalAfter)) {
+      const mateAfter = EvaluationUtils.extractMateIn(evalAfter);
+      if (mateAfter !== null) {
+        // Check if this is a winning mate FOR THE PLAYER (not against them)
+        const isMateForPlayer = (isWhiteMove && mateAfter > 0) || (!isWhiteMove && mateAfter < 0);
+
+        if (isMateForPlayer) {
+          // Player still has winning mate - at WORST this is INACCURACY
+          // Compare with evalBefore to determine severity
+          if (EvaluationUtils.isMateScore(evalBefore)) {
+            const mateBefore = EvaluationUtils.extractMateIn(evalBefore);
+            if (mateBefore !== null) {
+              const wasAlsoMateForPlayer = (isWhiteMove && mateBefore > 0) || (!isWhiteMove && mateBefore < 0);
+              if (wasAlsoMateForPlayer) {
+                // Had mate, still have mate - check how much longer
+                const absBefore = Math.abs(mateBefore);
+                const absAfter = Math.abs(mateAfter);
+                const movesLonger = absAfter - absBefore;
+
+                if (absAfter <= absBefore) {
+                  // Mate is same or faster - BEST
+                  return { markerType: MarkerType.BEST, centipawnLoss: 0 };
+                }
+
+                if (movesLonger <= 3) {
+                  return { markerType: MarkerType.GOOD, centipawnLoss: 30 };
+                } else {
+                  // Even 10+ moves longer is just INACCURACY - still have mate!
+                  return { markerType: MarkerType.INACCURACY, centipawnLoss: 80 };
+                }
+              }
+            }
+          }
+          // Found mate from non-mate position - let it fall through for brilliant check
+          // But ensure it's at least GOOD if not caught elsewhere
+        }
+      }
+    }
 
     // ⚠️ CRITICAL FIX: If we're ALREADY in a forced mate sequence (losing), DON'T classify moves!
     if (EvaluationUtils.isMateScore(evalBefore)) {
@@ -115,16 +155,15 @@ export class MateSequenceHandler {
       } else if (absAfter < absBest) {
         return { markerType: MarkerType.BEST, centipawnLoss: 0 };
       } else {
-        // ✅ More lenient thresholds for mate sequences
-        // Playing a slightly longer mate (up to 2 moves longer) is still GOOD
-        // M5 vs M3 = 2 moves longer = GOOD (not punished harshly)
+        // ✅ VERY lenient thresholds for mate sequences
+        // If you STILL have mate, it's NEVER a blunder or mistake!
+        // At worst it's an inaccuracy - you're still winning
         const movesLonger = absAfter - absBest;
-        if (movesLonger <= 2) {
-          return { markerType: MarkerType.GOOD, centipawnLoss: 50 };
-        } else if (movesLonger <= 4) {
-          return { markerType: MarkerType.INACCURACY, centipawnLoss: 150 };
+        if (movesLonger <= 3) {
+          return { markerType: MarkerType.GOOD, centipawnLoss: 30 };
         } else {
-          return { markerType: MarkerType.MISTAKE, centipawnLoss: 250 };
+          // Even 10+ moves longer is just INACCURACY - you still have mate!
+          return { markerType: MarkerType.INACCURACY, centipawnLoss: 80 };
         }
       }
     }
@@ -168,21 +207,39 @@ export class MateSequenceHandler {
       if (absAfter <= absBefore) {
         return { markerType: MarkerType.BEST, centipawnLoss: 0 };
       } else {
-        // ✅ More lenient thresholds for mate sequences
-        // Playing a slightly longer mate (up to 2 moves longer) is still GOOD
+        // ✅ VERY lenient thresholds for mate sequences
+        // If you STILL have mate, it's NEVER a blunder or mistake!
+        // At worst it's an inaccuracy - you're still winning
         const movesLonger = absAfter - absBefore;
-        if (movesLonger <= 2) {
-          return { markerType: MarkerType.GOOD, centipawnLoss: 50 };
-        } else if (movesLonger <= 4) {
-          return { markerType: MarkerType.INACCURACY, centipawnLoss: 150 };
+        if (movesLonger <= 3) {
+          return { markerType: MarkerType.GOOD, centipawnLoss: 30 };
         } else {
-          return { markerType: MarkerType.MISTAKE, centipawnLoss: 250 };
+          // Even 10+ moves longer is just INACCURACY - you still have mate!
+          return { markerType: MarkerType.INACCURACY, centipawnLoss: 80 };
         }
       }
     }
 
     // Mate lost (had mate, lost it)
     if (EvaluationUtils.isMateScore(evalBefore) && !EvaluationUtils.isMateScore(evalAfter)) {
+      const mateBefore = EvaluationUtils.extractMateIn(evalBefore);
+      // Check if player had the mate (not opponent)
+      const playerHadMate = mateBefore !== null &&
+        ((isWhiteMove && mateBefore > 0) || (!isWhiteMove && mateBefore < 0));
+
+      if (playerHadMate) {
+        // Player lost their forced mate - but check if still winning big
+        const playerEvalAfter = isWhiteMove ? evalAfter : -evalAfter;
+
+        if (playerEvalAfter >= 500) {
+          // Still winning by 5+ pawns - this is INACCURACY at worst, not BLUNDER
+          return { markerType: MarkerType.INACCURACY, centipawnLoss: 100 };
+        } else if (playerEvalAfter >= 200) {
+          // Still winning by 2+ pawns - MISTAKE
+          return { markerType: MarkerType.MISTAKE, centipawnLoss: 150 };
+        }
+        // Less than +2 pawns after losing mate - that's a real blunder, fall through
+      }
       return null; // Let it fall through to normal calculation
     }
 
@@ -190,9 +247,6 @@ export class MateSequenceHandler {
     if (!EvaluationUtils.isMateScore(evalBefore) && EvaluationUtils.isMateScore(evalAfter)) {
       const mateAfter = EvaluationUtils.extractMateIn(evalAfter);
       if (mateAfter !== null) {
-        // ✅ FIXED: Consistent check using extractMateIn
-        const isMateForPlayer = (isWhiteMove && mateAfter > 0) || (!isWhiteMove && mateAfter < 0);
-
         // Check if this is a forced move
         let isForcedMove = false;
         if (fenBefore) {

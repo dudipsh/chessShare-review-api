@@ -91,6 +91,22 @@ export const MISTAKE_THRESHOLDS = {
   MIN_MOVE_NUMBER: 4,
 
   // ===========================================
+  // STILL WINNING LENIENCY (Chess.com style)
+  // ===========================================
+
+  /**
+   * If position is STILL winning after the move, be more lenient
+   * Chess.com doesn't call it a mistake if you're still clearly winning
+   */
+  STILL_WINNING_THRESHOLD: 150, // +1.5 pawns = still winning, not a mistake
+
+  /**
+   * Enable/disable the "still winning" leniency
+   * When enabled, moves that leave you still winning won't be called mistakes
+   */
+  ENABLE_STILL_WINNING_LENIENCY: true,
+
+  // ===========================================
   // Piece Values for Loss Calculation
   // ===========================================
 

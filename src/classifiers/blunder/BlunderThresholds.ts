@@ -81,15 +81,31 @@ export const BLUNDER_THRESHOLDS = {
   // ===========================================
   // Anti-False-Positive Filters
   // ===========================================
-  
+
   /** Don't double-count if position already completely lost */
   ALREADY_LOST_THRESHOLD: -600, // Already 6+ pawns down
-  
+
   /** Don't mark as blunder in checkmate sequences */
   IGNORE_IN_FORCED_MATE: true,
-  
+
   /** Minimum move number for blunder classification */
   MIN_MOVE_NUMBER: 3,
+
+  // ===========================================
+  // STILL WINNING LENIENCY (Chess.com style)
+  // ===========================================
+
+  /**
+   * If position is STILL winning after the move, be more lenient
+   * Chess.com doesn't call it a blunder if you're still crushing
+   */
+  STILL_WINNING_THRESHOLD: 200, // +2 pawns = still winning, not a blunder
+
+  /**
+   * Enable/disable the "still winning" leniency
+   * When enabled, moves that leave you still winning won't be called blunders
+   */
+  ENABLE_STILL_WINNING_LENIENCY: true,
   
   // ===========================================
   // Piece Values for Calculation

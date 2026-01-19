@@ -409,10 +409,13 @@ export class PuzzleExtractionService {
   }
 
   /**
-   * Extract positive puzzles (brilliant/great tactical finds)
+   * Extract positive puzzles (brilliant tactical finds)
    *
-   * These are moves the player FOUND - they played a brilliant/great move
+   * These are moves the player FOUND - they played a brilliant move
    * The puzzle is to replay and appreciate the tactic they found
+   *
+   * NOTE: Only 'brilliant' moves create puzzles, not 'great' moves
+   * Great moves are good but not puzzle-worthy
    */
   extractPositivePuzzles(
     evaluations: Map<string, MoveEvaluation>,
@@ -426,8 +429,8 @@ export class PuzzleExtractionService {
     evaluationsArray.forEach((evaluation) => {
       const markerTypeLower = String(evaluation.markerType || '').toLowerCase();
 
-      // Only extract brilliant/great moves (tactics the player FOUND)
-      if (markerTypeLower !== 'brilliant' && markerTypeLower !== 'great') {
+      // Only extract BRILLIANT moves (not great - those aren't puzzle-worthy)
+      if (markerTypeLower !== 'brilliant') {
         return;
       }
 
