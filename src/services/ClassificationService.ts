@@ -183,7 +183,8 @@ export class ClassificationService {
       centipawnLoss,
       context.evalBefore,
       context.evalAfter,
-      context.moveNumber
+      context.moveNumber,
+      context.isWhiteMove
     );
 
     return { markerType: finalMarkerType, centipawnLoss };
@@ -197,7 +198,8 @@ export class ClassificationService {
     centipawnLoss: number,
     evalBefore?: number,
     evalAfter?: number,
-    moveNumber?: number
+    moveNumber?: number,
+    isWhiteMove?: boolean
   ): MarkerType {
     // Check for blunder first (most severe)
     const blunderResult = this.blunderDetector.isBlunder({
@@ -206,6 +208,7 @@ export class ClassificationService {
       evalBefore,
       evalAfter,
       moveNumber,
+      isWhiteMove,
     });
     if (blunderResult.isBlunder) {
       return MarkerType.BLUNDER;
@@ -218,6 +221,7 @@ export class ClassificationService {
       evalBefore,
       evalAfter,
       moveNumber,
+      isWhiteMove,
     });
     if (mistakeResult.isMistake) {
       return MarkerType.MISTAKE;
