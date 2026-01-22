@@ -169,14 +169,9 @@ export class GameReviewService {
           evaluations.set(position.fen, evaluation);
           summary.book++;
 
-          // Book moves count as 100% accuracy
-          if (position.isWhiteMove) {
-            whiteAccuracySum += 100;
-            whiteMoveCount++;
-          } else {
-            blackAccuracySum += 100;
-            blackMoveCount++;
-          }
+          // Book moves are excluded from accuracy calculation
+          // They're theoretical moves, not playing decisions
+          // (Don't add to accuracy sums or move counts)
 
           options.onProgress?.(i + 1, positions.length);
           options.onMoveAnalyzed?.({
@@ -399,15 +394,30 @@ export class GameReviewService {
 
   /**
    * Calculate move accuracy using Chess.com-style formula
-   * Based on ACPL (Average Centipawn Loss)
+   * Uses a 3-tier piecewise approach calibrated to match Chess.com results
+   *
+   * Reference values (recalibrated v2):
+   * - 0cp loss → 100% accuracy
+   * - 25cp loss → 96% accuracy
+   * - 50cp loss → 83% accuracy
+   * - 100cp loss → 57% accuracy
+   * - 150cp loss → ~35% accuracy
+   * - 200cp loss → ~21% accuracy
+   * - 300cp loss → ~8% accuracy
    */
   private calculateMoveAccuracy(centipawnLoss: number): number {
-    // Cap the loss at 200cp for accuracy calculation
-    const cappedLoss = Math.min(centipawnLoss, 200);
+    let accuracy: number;
 
-    // Chess.com style formula: accuracy = 100 * 0.995^(cappedLoss)
-    // This gives ~100% for 0cp loss, ~85% for 100cp loss, ~72% for 200cp loss
-    const accuracy = 100 * Math.pow(0.995, cappedLoss);
+    if (centipawnLoss <= 25) {
+      // Perfect/excellent moves (0-25cp): gentle decay from 100% to 96%
+      accuracy = 100 - centipawnLoss * 0.16;
+    } else if (centipawnLoss <= 100) {
+      // Good moves (25-100cp): steeper decay from 96% to 57%
+      accuracy = 96 - (centipawnLoss - 25) * 0.52;
+    } else {
+      // Mistakes/Blunders (100+cp): exponential decay from 57%
+      accuracy = 57 * Math.exp(-0.01 * (centipawnLoss - 100));
+    }
 
     return Math.max(0, Math.min(100, accuracy));
   }

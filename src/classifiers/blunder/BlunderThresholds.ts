@@ -15,9 +15,9 @@ export const BLUNDER_THRESHOLDS = {
   // ===========================================
   // Basic Classification Thresholds
   // ===========================================
-  
+
   /** Minimum centipawn loss for a blunder */
-  MIN_CP_LOSS: 250, // 2.5 pawns
+  MIN_CP_LOSS: 200, // 2.0 pawns - matches Chess.com
   
   /** No maximum - anything above minimum is a blunder */
   

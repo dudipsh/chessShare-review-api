@@ -23,19 +23,21 @@ export const ACCURACY_ADJUSTMENT = {
  * Move classification by centipawn loss (calibrated to Chess.com)
  * Chess.com NAGs: $1=!, $6=?!, $2=?, $4=??
  *
- * RECALIBRATED to match Chess.com's lenient scoring:
- * - Chess.com is MUCH more lenient than Lichess
- * - A 150cp loss is still often "Good" in Chess.com
- * - Blunders require significant material loss (300+cp)
+ * RECALIBRATED to match Chess.com's classification:
+ * - Blunder: >200cp (losing ~2+ pawns, major tactical error)
+ * - Mistake: 150-200cp (clear error, losing material/advantage)
+ * - Miss: 100-150cp (missing good opportunity)
+ * - Inaccuracy: 50-100cp (small error)
+ * - Good: 0-50cp (acceptable move)
  */
 export const MOVE_CLASSIFICATION_THRESHOLDS = {
   BEST: 15,        // 0-15cp = Best move ($1 !)
   GREAT: 25,       // 15-25cp = Great move (checks, winning moves)
-  GOOD: 75,        // 25-75cp = Good move (no NAG in Chess.com)
-  INACCURACY: 125, // 75-125cp = Inaccuracy ($6 ?!)
-  MISS: 200,       // 125-200cp = Miss (tactical miss, part of ?!)
-  MISTAKE: 300,    // 200-300cp = Mistake ($2 ?)
-  BLUNDER: 300,    // 300+cp = Blunder ($4 ??)
+  GOOD: 50,        // 25-50cp = Good move (no NAG in Chess.com)
+  INACCURACY: 100, // 50-100cp = Inaccuracy ($6 ?!)
+  MISS: 150,       // 100-150cp = Miss (tactical miss)
+  MISTAKE: 200,    // 150-200cp = Mistake ($2 ?)
+  BLUNDER: 200,    // 200+cp = Blunder ($4 ??)
 } as const;
 
 /**

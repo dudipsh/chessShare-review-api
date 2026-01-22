@@ -60,11 +60,23 @@ export class BrilliantDetector {
     if (this._isForcedMove(fenBefore)) {
       return this._notBrilliant('Forced move - only one legal option');
     }
-    
+
+    // ==========================================
+    // 🆕 שלב 0.5: בדיקת הקרבת מלכה עם מט מאולץ
+    // זה חייב לבוא לפני בדיקת cpLoss כי הקרבות מלכה מבריקות
+    // יכולות להיראות כ"blunder" לסטוקפיש
+    // ==========================================
+    const queenSacWithMateResult = this._checkQueenSacrificeWithMate(
+      move, fenBefore, fenAfter, isWhiteMove
+    );
+    if (queenSacWithMateResult.isBrilliant) {
+      return queenSacWithMateResult;
+    }
+
     // ==========================================
     // שלב 1: תנאי סף מחמירים מאוד (MUST PASS)
     // ==========================================
-    
+
     // תנאי 1: Best move או קרוב מאוד (מקסימום 15cp loss)
     const isBestOrNear = this._isBestOrNearBest(playedMoveUci, topMoves, centipawnLoss);
     if (!isBestOrNear) {
@@ -461,46 +473,176 @@ export class BrilliantDetector {
   
   /**
    * בדיקה אם זו לקיחה פשוטה (recapture)
+   *
+   * 🔧 תיקון v3: יותר אגרסיבי בזיהוי recaptures!
+   * אם זו לקיחה רגילה (לא הקרבה) והיריב יכול לקחת בחזרה = זה exchange/recapture פשוט
    */
   private _isSimpleRecapture(
-    move: any, 
-    fenBefore: string, 
+    move: any,
+    fenBefore: string,
     topMoves: Array<{ uci: string; cp: number }>
   ): boolean {
     if (!move.captured) return false;
-    
+
     const movedPieceValue = PIECE_VALUES[move.piece as keyof typeof PIECE_VALUES] || 0;
     const capturedPieceValue = PIECE_VALUES[move.captured as keyof typeof PIECE_VALUES] || 0;
-    
-    // אם הכלי שזז שווה הרבה יותר = אולי הקרבה
+
+    // אם הכלי שזז שווה הרבה יותר = אולי הקרבה (לא recapture פשוט)
     const isSacrifice = movedPieceValue > capturedPieceValue + 150;
     if (isSacrifice) return false;
-    
+
     try {
       const chess = new Chess(fenBefore);
       const targetSquare = move.to;
-      
+
       chess.move(move);
-      
-      const attackers = chess.moves({ verbose: true }).filter(
+
+      const recapturers = chess.moves({ verbose: true }).filter(
         m => m.to === targetSquare && m.captured
       );
-      
-      // אכילה חינם
-      if (attackers.length === 0) {
+
+      // אכילה חינם - מהלך ברור
+      if (recapturers.length === 0) {
         return true;
       }
-      
-      // אם ההפרש ל-topMove השני גדול = מהלך ברור
-      if (topMoves.length >= 2) {
-        const gap = Math.abs(topMoves[0].cp - topMoves[1].cp);
-        if (gap > 100) return true;
+
+      // 🔧 תיקון v3: אם היריב יכול לקחת בחזרה ואנחנו לא מקריבים = exchange פשוט!
+      // זה מכסה מקרים כמו Bxd5 אחרי שהיריב אכל משהו ב-d5
+      // הכלי שלנו שווה פחות או שווה לכלי שאכלנו = לא הקרבה = לא מבריק
+      if (recapturers.length > 0 && movedPieceValue <= capturedPieceValue) {
+        return true;  // זה trade/exchange פשוט
       }
-      
+
+      // 🔧 תיקון v3: אפילו אם הכלי שלנו קצת יותר יקר (עד 100cp הפרש)
+      // עדיין לא מבריק כי זה trade נורמלי
+      if (recapturers.length > 0 && movedPieceValue <= capturedPieceValue + 100) {
+        // בדוק אם זה המהלך הכי טוב במרחק גדול
+        if (topMoves.length >= 2) {
+          const gap = Math.abs(topMoves[0].cp - topMoves[1].cp);
+          // רק אם הפער גדול מאוד (200+) אפשר לשקול שזה מיוחד
+          if (gap < 200) {
+            return true;  // לא מיוחד מספיק
+          }
+        } else {
+          return true;  // אין מספיק מידע, נניח שזה פשוט
+        }
+      }
+
     } catch {
       // שגיאה
     }
-    
+
     return false;
+  }
+
+  /**
+   * 🆕 בדיקת הקרבת מלכה עם מט מאולץ
+   * מקרה קלאסי: Qg1+! - אם הצריח יאכל, יש מט. אם המלכה תאכל, השחקן מרוויח מלכה.
+   *
+   * הקריטריונים:
+   * 1. המהלך הוא מהלך מלכה שנותן שח
+   * 2. למלכה יש לפחות 2 תגובות אפשריות (כלומר לא מאולץ)
+   * 3. לפחות תגובה אחת מובילה למט מיידי
+   * 4. התגובה האחרת גורמת להפסד חומר משמעותי (מלכה)
+   */
+  private _checkQueenSacrificeWithMate(
+    move: any,
+    fenBefore: string,
+    fenAfter: string,
+    isWhiteMove: boolean
+  ): BrilliantDetectionResult {
+    // רק מהלכי מלכה
+    if (move.piece !== 'q') {
+      return this._notBrilliant('Not a queen move');
+    }
+
+    try {
+      const chessAfter = new Chess(fenAfter);
+
+      // בדוק אם המהלך נתן שח
+      if (!chessAfter.isCheck()) {
+        return this._notBrilliant('Queen move does not give check');
+      }
+
+      // קבל את כל התגובות האפשריות ליריב
+      const responses = chessAfter.moves({ verbose: true });
+
+      // 🆕 מקרה מיוחד: אם יש רק תגובה אחת שהיא לקיחת המלכה,
+      // ואחרי הלקיחה השחקן יכול לקחת בחזרה = combo מבריק!
+      // דוגמא: Qg1+ Qxg1 Nxg1 - הקרבת מלכה שזוכה במלכה!
+      if (responses.length === 1) {
+        const response = responses[0];
+        // בדוק אם התגובה היא לקיחת המלכה
+        if (response.to === move.to && response.captured === 'q') {
+          // בצע את הלקיחה ובדוק אם יש לקיחה חזרה
+          const testChess = new Chess(fenAfter);
+          testChess.move(response);
+
+          const counterMoves = testChess.moves({ verbose: true });
+          // בדוק אם יש מהלך שלוקח את הכלי שלקח את המלכה
+          const recaptureMove = counterMoves.find((m: any) =>
+            m.to === move.to && m.captured === response.piece
+          );
+
+          if (recaptureMove) {
+            // זו הקרבת מלכה שמחזירה מלכה!
+            return {
+              isBrilliant: true,
+              brilliantType: BrilliantMoveType.SACRIFICE,
+              reason: 'Queen sacrifice forcing queen win!',
+              confidence: 98,
+            };
+          }
+        }
+
+        return this._notBrilliant('Only one response - forced position');
+      }
+
+      // בדוק אם יש תגובה שמובילה למט מיידי
+      let hasMateResponse = false;
+      let hasSafeResponse = false;
+      const movedToSquare = move.to;
+
+      for (const response of responses) {
+        // בצע את התגובה
+        const testChess = new Chess(fenAfter);
+        testChess.move(response);
+
+        // קבל את התגובות של השחקן
+        const counterMoves = testChess.moves({ verbose: true });
+
+        // בדוק אם יש מט מיידי אחרי תגובה זו
+        for (const counterMove of counterMoves) {
+          const mateTestChess = new Chess(testChess.fen());
+          mateTestChess.move(counterMove);
+
+          if (mateTestChess.isCheckmate()) {
+            // נמצא מט! בדוק אם זו תגובה של לקיחת המלכה
+            if (response.to === movedToSquare && response.captured === 'q') {
+              hasMateResponse = true;
+            }
+          }
+        }
+
+        // בדוק אם זו תגובה "בטוחה" (לקיחה עם המלכה)
+        if (response.to === movedToSquare && response.piece === 'q' && response.captured === 'q') {
+          hasSafeResponse = true;
+        }
+      }
+
+      // אם יש תגובה שמובילה למט ויש גם תגובה בטוחה = הקרבה מבריקה!
+      if (hasMateResponse && hasSafeResponse) {
+        return {
+          isBrilliant: true,
+          brilliantType: BrilliantMoveType.SACRIFICE,
+          reason: 'Queen sacrifice with forced mate if captured wrong!',
+          confidence: 99,
+        };
+      }
+    } catch {
+      // שגיאה בניתוח
+    }
+
+    return this._notBrilliant('Not a queen sacrifice with mate');
   }
 }

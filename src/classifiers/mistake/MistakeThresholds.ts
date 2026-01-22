@@ -17,10 +17,10 @@ export const MISTAKE_THRESHOLDS = {
   // ===========================================
 
   /** Minimum centipawn loss for a standard mistake */
-  MIN_CP_LOSS: 100, // 1.0 pawns (lowered to catch more mistakes)
+  MIN_CP_LOSS: 150, // 1.5 pawns - matches Chess.com
 
   /** Maximum centipawn loss before becoming a blunder */
-  MAX_CP_LOSS: 250, // 2.5 pawns
+  MAX_CP_LOSS: 200, // 2.0 pawns - matches Chess.com
 
   // ===========================================
   // Advantage Loss Detection (Chess.com style)

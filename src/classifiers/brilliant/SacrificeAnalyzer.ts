@@ -86,9 +86,11 @@ export class SacrificeAnalyzer {
    * 🆕 ניתוח כלי תלוי - האם המהלך משאיר כלי תלוי שלקיחתו היא טעות?
    * זה המקרה של: "הקרבתי צריח, אם היריב יאכל זו טעות!"
    *
-   * 🔧 תיקון v2: ההבדל בין מהלך אכילה למהלך רגיל:
-   * - מהלך אכילה (כמו Rxe5+): הכלי שזז יכול להילקח בחזרה = הקרבה אפשרית
-   * - מהלך רגיל (כמו Bh6): הכלי שזז יכול להילקח = לא הקרבה, פשוט מלכודת
+   * 🔧 תיקון v3 (סופי!):
+   * - מהלכי NON-CAPTURE (כמו Be6): לא יכולים להיות hanging piece sacrifice!
+   *   הם לא מקריבים כלום - רק מזיזים כלי. אם משהו תלוי, הוא כנראה היה תלוי קודם.
+   * - מהלכי CAPTURE (כמו Rxe5+): רק הכלי שזז יכול להיות hanging sacrifice.
+   *   כלומר: אם הצריח על e5 יכול להילקח, וזו טעות לקחת אותו = הקרבה מבריקה.
    */
   private _analyzeHangingPiece(
     move: any,
@@ -102,32 +104,42 @@ export class SacrificeAnalyzer {
       return this._noSacrificeResult();
     }
 
+    const isCapture = !!move.captured;
+    const movedToSquare = move.to;
+
+    // 🔧 תיקון v3: מהלכים שאינם אכילות (כמו Be6) לא יכולים להיות hanging sacrifice!
+    // הסיבה: Be6 פשוט מזיז פיל - הוא לא "מקריב" כלום.
+    // אם יש כלי תלוי אחרי Be6, הוא כנראה היה תלוי גם לפני.
+    if (!isCapture) {
+      return this._noSacrificeResult();
+    }
+
     try {
       const chessAfter = new Chess(fenAfter);
-      const playerColor = isWhiteMove ? 'w' : 'b';
-      const opponentColor = isWhiteMove ? 'b' : 'w';
 
-      // 🔧 תיקון: קבל את המשבצת שהכלי זז אליה והאם זה מהלך אכילה
-      const movedToSquare = move.to;
-      const isCapture = !!move.captured;
-
-      // מצא את כל הכלים שלי שהיריב יכול לאכול
+      // מצא את כל הלקיחות שהיריב יכול לעשות
       const opponentMoves = chessAfter.moves({ verbose: true });
       const captureMoves = opponentMoves.filter(m => m.captured);
 
-      // מצא אם יש כלי תלוי משמעותי
+      // 🔧 תיקון v3: עבור מהלכי CAPTURE, רק הכלי שזז יכול להיות hanging sacrifice
+      // כלומר: אם שיחקנו Rxe5+, רק בדוק אם הצריח על e5 יכול להילקח (ואם זו טעות)
+      const alreadyCapturedValue = PIECE_VALUES[move.captured as keyof typeof PIECE_VALUES] || 0;
+
       for (const captureMove of captureMoves) {
-        // 🔧 תיקון v2:
-        // - אם זה מהלך NON-CAPTURE: דלג על לקיחת הכלי שזז (זה לא הקרבה)
-        // - אם זה מהלך CAPTURE: הכלי שזז יכול להיחשב כהקרבה (כמו Rxe5+)
-        if (!isCapture && captureMove.to === movedToSquare) {
+        // רק בדוק לקיחות של הכלי שזז (לא כלים אחרים!)
+        if (captureMove.to !== movedToSquare) {
           continue;
         }
 
-        const capturedValue = PIECE_VALUES[captureMove.captured as keyof typeof PIECE_VALUES] || 0;
+        const hangingPieceValue = PIECE_VALUES[captureMove.captured as keyof typeof PIECE_VALUES] || 0;
 
-        // רק כלים בעלי ערך משמעותי (לפחות קצין)
-        if (capturedValue < BRILLIANT_THRESHOLDS.MIN_SACRIFICE_VALUE) {
+        // 🔧 תיקון v4: חשב NET SACRIFICE - הכלי התלוי פחות מה שכבר אכלנו!
+        // Nxd5: פרש (320) אכל רגלי (100) → נטו הקרבה = 320 - 100 = 220
+        // Rxe5+: צריח (500) אכל רגלי (100) → נטו הקרבה = 500 - 100 = 400
+        const netSacrifice = hangingPieceValue - alreadyCapturedValue;
+
+        // רק הקרבות משמעותיות (לפחות קצין נטו!)
+        if (netSacrifice < BRILLIANT_THRESHOLDS.MIN_SACRIFICE_VALUE) {
           continue;
         }
 
@@ -141,9 +153,9 @@ export class SacrificeAnalyzer {
           return {
             isSacrifice: true,
             sacrificeType: this._getSacrificeTypeByPiece(captureMove.captured || 'p'),
-            sacrificeValue: capturedValue,
-            immediateReturn: 0, // היריב לא אכל עדיין
-            netSacrifice: capturedValue,
+            sacrificeValue: hangingPieceValue,
+            immediateReturn: alreadyCapturedValue, // מה שכבר אכלנו
+            netSacrifice: netSacrifice,
             hasCompensation: true,
             compensationType: 'trap',
             leadsToMate: this._checkIfLeadsToMate(evalAfter, isWhiteMove),

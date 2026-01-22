@@ -13,12 +13,12 @@ export const INACCURACY_THRESHOLDS = {
   // ===========================================
   // Basic Classification Thresholds
   // ===========================================
-  
+
   /** Minimum centipawn loss for an inaccuracy */
-  MIN_CP_LOSS: 35, // ~0.35 pawns
-  
+  MIN_CP_LOSS: 50, // 0.5 pawns - matches Chess.com
+
   /** Maximum centipawn loss before becoming a miss/mistake */
-  MAX_CP_LOSS: 100, // 1 pawn
+  MAX_CP_LOSS: 100, // 1 pawn - matches Chess.com
   
   // ===========================================
   // Context Adjustments
