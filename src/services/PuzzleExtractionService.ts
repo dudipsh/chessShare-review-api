@@ -14,7 +14,6 @@ import type { PersonalMistakeRecord } from '../types/puzzle.types.js';
 import { convertLegacyTheme } from '../types/puzzle.types.js';
 import { tacticalThemeService } from './TacticalThemeService.js';
 import {
-  PUZZLE_MAX_LOSING_EVAL,
   PUZZLE_MAX_WINNING_EVAL,
   MAX_MISTAKE_PUZZLES_PER_GAME,
   MAX_POSITIVE_PUZZLES_PER_GAME,
@@ -146,13 +145,18 @@ export class PuzzleExtractionService {
       }
 
       // Skip if position was already badly losing
-      // EXCEPTION: Always create puzzles for BLUNDERS
+      // EXCEPTION: Always create puzzles for BLUNDERS (unless facing mate)
       const evalBefore = evaluation.evaluationBefore || 0;
       const playerEval = playerColor === 'white' ? evalBefore : -evalBefore;
       const isBlunder = markerTypeLower === 'blunder';
 
-      if (!isBlunder && playerEval < -PUZZLE_MAX_LOSING_EVAL) {
-        return;
+      // ✅ Skip positions where player is facing mate or heavily losing
+      // No puzzle makes sense when the game is already decided
+      const isMateAgainstPlayer = playerEval < -90000;
+      const isHeavilyLosing = playerEval < -500; // Losing by more than 5 pawns
+
+      if (isMateAgainstPlayer || isHeavilyLosing) {
+        return; // Don't create puzzle from lost positions (even for blunders)
       }
 
       // DYNAMIC WINNING POSITION LOGIC
@@ -326,9 +330,16 @@ export class PuzzleExtractionService {
       const evalBefore = evaluation.evaluationBefore || 0;
       const playerEvalBefore = playerColor === 'white' ? evalBefore : -evalBefore;
 
-      // Skip positions that are already heavily won or lost
+      // ✅ Skip positions where player is heavily losing or facing mate
+      const isMateAgainstPlayer = playerEvalBefore < -90000;
+      const isHeavilyLosing = playerEvalBefore < -500; // Losing by more than 5 pawns
+
+      if (isMateAgainstPlayer || isHeavilyLosing) {
+        return;
+      }
+
+      // Skip positions that are already heavily won
       if (playerEvalBefore > PUZZLE_MAX_WINNING_EVAL) return;
-      if (playerEvalBefore < -PUZZLE_MAX_LOSING_EVAL) return;
 
       // The player played a different move than the best move
       const playedMove = evaluation.move;
@@ -452,12 +463,24 @@ export class PuzzleExtractionService {
       // Skip if already at max
       if (positivePuzzles.length >= MAX_POSITIVE_PUZZLES_PER_GAME) return;
 
+      // ✅ CRITICAL: Skip if player is in a losing position (including mate threats)
+      // No point showing a "brilliant" move if the opponent is about to mate us
+      const evalBefore = evaluation.evaluationBefore || 0;
+      const playerEval = playerColor === 'white' ? evalBefore : -evalBefore;
+
+      // Check for mate scores (typically > 90000 or < -90000)
+      const isMateAgainstPlayer = playerEval < -90000;
+      const isHeavilyLosing = playerEval < -500; // Losing by more than 5 pawns
+
+      if (isMateAgainstPlayer || isHeavilyLosing) {
+        return; // Don't create puzzle from lost positions
+      }
+
       // Get the played move (which is the best move for positive puzzles)
       const playedMove = evaluation.move;
       const bestMove = evaluation.bestMove;
 
-      // Detect tactical theme
-      const evalBefore = evaluation.evaluationBefore || 0;
+      // Detect tactical theme (evalBefore already declared above)
       const evalAfter = evaluation.evaluationAfter || 0;
       const themeResult = tacticalThemeService.detectTheme(
         evaluation.fen,
