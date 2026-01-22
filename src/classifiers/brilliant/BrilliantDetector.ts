@@ -110,24 +110,21 @@ export class BrilliantDetector {
     if (this._isSimpleMaterialGain(move, evalBefore, evalAfter, isWhiteMove)) {
       return this._notBrilliant('Simple material gain - not tactical brilliance');
     }
-    
-    // 🆕 תנאי 11: אין אלטרנטיבות טובות (פער גדול מהמהלך השני)
-    if (this._hasGoodAlternatives(topMoves)) {
-      return this._notBrilliant('Has good alternatives - not unique');
-    }
-    
+
     // חישוב eval swing
     const evalSwing = this._calculateEvalSwing(evalBefore, evalAfter, isWhiteMove);
-    
+
     // ==========================================
     // שלב 2: קריטריון יחיד - הקרבה עם תמורה!
     // מבריק = הקרבה. נקודה.
+    // 🔧 תיקון: בודקים הקרבה לפני בדיקת אלטרנטיבות!
+    // הקרבה היא מבריקה גם אם יש מהלכים טובים אחרים
     // ==========================================
-    
+
     const sacrificeResult = this.sacrificeAnalyzer.analyzeSacrifice(
       move, fenBefore, evalBefore, evalAfter, isWhiteMove, fenAfter, topMovesAfter
     );
-    
+
     if (sacrificeResult.isSacrifice && sacrificeResult.hasCompensation) {
       // בדיקת false-positive
       if (this._isFalsePositiveSacrifice(sacrificeResult, move)) {
@@ -135,16 +132,16 @@ export class BrilliantDetector {
       }
       
       // הקרבה של כלי תלוי שלקיחתו = טעות
+      // 🔧 תיקון: לא דורשים evalSwing חיובי להקרבת כלי תלוי!
+      // הרעיון: המהלך מציע כלי, ואם היריב יאכל = זו טעות גדולה
+      // זה מבריק גם אם האיוול לא משתפר מיד (כמו Rxe5+ במשחק של מגנוס)
       if (sacrificeResult.isHangingPieceSacrifice && sacrificeResult.takingIsMistake) {
-        // וודא שהמהלך באמת שיפר משהו (לא רק שמר על מט קיים)
-        if (evalSwing >= 100 || sacrificeResult.leadsToMate) {
-          return {
-            isBrilliant: true,
-            brilliantType: BrilliantMoveType.SACRIFICE,
-            reason: `Hanging ${sacrificeResult.sacrificeType} - taking it is a mistake!`,
-            confidence: 95,
-          };
-        }
+        return {
+          isBrilliant: true,
+          brilliantType: BrilliantMoveType.SACRIFICE,
+          reason: `Hanging ${sacrificeResult.sacrificeType} - taking it is a mistake!`,
+          confidence: 95,
+        };
       }
       
       // הקרבה שמובילה למט (אבל רק אם המט לא היה קיים לפני!)
@@ -170,7 +167,13 @@ export class BrilliantDetector {
         };
       }
     }
-    
+
+    // 🆕 תנאי 11: אין אלטרנטיבות טובות (פער גדול מהמהלך השני)
+    // 🔧 תיקון: בדיקה זו רק למהלכים שאינם הקרבה!
+    if (this._hasGoodAlternatives(topMoves)) {
+      return this._notBrilliant('Has good alternatives - not unique');
+    }
+
     // אין הקרבה = לא מבריק
     return this._notBrilliant('No sacrifice detected - brilliant requires sacrifice');
   }

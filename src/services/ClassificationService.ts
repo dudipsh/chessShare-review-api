@@ -8,6 +8,7 @@ import type {
   StockfishAnalysis,
 } from '../types/index.js';
 import { MarkerType } from '../types/index.js';
+import { classificationLog, logMoveClassification, clearClassificationLog } from '../utils/classificationLogger.js';
 import {
   MOVE_CLASSIFICATION_THRESHOLDS,
   getMarkerTypeByLoss,
@@ -67,6 +68,8 @@ export class ClassificationService {
   reset(): void {
     this.currentMoveNumber = undefined;
     this.currentGameWinner = null;
+    clearClassificationLog();
+    classificationLog('=== NEW GAME ANALYSIS STARTED ===');
   }
 
   /**
@@ -128,15 +131,33 @@ export class ClassificationService {
     }
 
     // 5. Check brilliant
-    const isBrilliant = this.checkBrilliant(
-      playedMove,
-      context,
+    const brilliantResult = this.brilliantDetector.isBrilliant({
+      move: playedMove,
+      fenBefore: context.fenBefore,
+      fenAfter: context.fenAfter,
+      evalBefore: context.evalBefore,
+      evalAfter: context.evalAfter,
+      isWhiteMove: context.isWhiteMove,
       centipawnLoss,
-      analysisBefore.topMoves,
-      analysisAfter.topMoves
-    );
+      topMoves: analysisBefore.topMoves || [],
+      playedMoveUci: context.playedMoveUci,
+      moveNumber: context.moveNumber,
+      topMovesAfter: analysisAfter.topMoves,
+    });
 
-    if (isBrilliant) {
+    classificationLog(`Move ${moveNumber}: ${playedMove.san} | eval: ${context.evalBefore} → ${context.evalAfter} | cpLoss=${centipawnLoss} | Brilliant? ${brilliantResult.isBrilliant} (${brilliantResult.reason || 'N/A'})`);
+
+    if (brilliantResult.isBrilliant) {
+      logMoveClassification({
+        moveNumber,
+        move: playedMove.san,
+        evalBefore: context.evalBefore,
+        evalAfter: context.evalAfter,
+        centipawnLoss,
+        markerType: 'BRILLIANT',
+        isBrilliantCheck: true,
+        brilliantReason: brilliantResult.reason,
+      });
       return { markerType: MarkerType.BRILLIANT, centipawnLoss };
     }
 
@@ -186,6 +207,15 @@ export class ClassificationService {
       context.moveNumber,
       context.isWhiteMove
     );
+
+    logMoveClassification({
+      moveNumber,
+      move: playedMove.san,
+      evalBefore: context.evalBefore,
+      evalAfter: context.evalAfter,
+      centipawnLoss,
+      markerType: finalMarkerType,
+    });
 
     return { markerType: finalMarkerType, centipawnLoss };
   }
@@ -270,29 +300,6 @@ export class ClassificationService {
     });
 
     return mateResult;
-  }
-
-  private checkBrilliant(
-    move: ExtendedChessMove,
-    context: MoveContext,
-    centipawnLoss: number,
-    topMoves?: Array<{ uci: string; cp: number }>,
-    topMovesAfter?: Array<{ uci: string; cp: number }>
-  ): boolean {
-    const result = this.brilliantDetector.isBrilliant({
-      move,
-      fenBefore: context.fenBefore,
-      fenAfter: context.fenAfter,
-      evalBefore: context.evalBefore,
-      evalAfter: context.evalAfter,
-      isWhiteMove: context.isWhiteMove,
-      centipawnLoss,
-      topMoves: topMoves || [],
-      playedMoveUci: context.playedMoveUci,
-      moveNumber: context.moveNumber,
-      topMovesAfter: topMovesAfter,
-    });
-    return result.isBrilliant;
   }
 
   private classifyBestMove(

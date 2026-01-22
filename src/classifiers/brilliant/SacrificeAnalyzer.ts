@@ -85,6 +85,10 @@ export class SacrificeAnalyzer {
   /**
    * 🆕 ניתוח כלי תלוי - האם המהלך משאיר כלי תלוי שלקיחתו היא טעות?
    * זה המקרה של: "הקרבתי צריח, אם היריב יאכל זו טעות!"
+   *
+   * 🔧 תיקון v2: ההבדל בין מהלך אכילה למהלך רגיל:
+   * - מהלך אכילה (כמו Rxe5+): הכלי שזז יכול להילקח בחזרה = הקרבה אפשרית
+   * - מהלך רגיל (כמו Bh6): הכלי שזז יכול להילקח = לא הקרבה, פשוט מלכודת
    */
   private _analyzeHangingPiece(
     move: any,
@@ -97,30 +101,41 @@ export class SacrificeAnalyzer {
     if (!fenAfter) {
       return this._noSacrificeResult();
     }
-    
+
     try {
       const chessAfter = new Chess(fenAfter);
       const playerColor = isWhiteMove ? 'w' : 'b';
       const opponentColor = isWhiteMove ? 'b' : 'w';
-      
+
+      // 🔧 תיקון: קבל את המשבצת שהכלי זז אליה והאם זה מהלך אכילה
+      const movedToSquare = move.to;
+      const isCapture = !!move.captured;
+
       // מצא את כל הכלים שלי שהיריב יכול לאכול
       const opponentMoves = chessAfter.moves({ verbose: true });
       const captureMoves = opponentMoves.filter(m => m.captured);
-      
+
       // מצא אם יש כלי תלוי משמעותי
       for (const captureMove of captureMoves) {
+        // 🔧 תיקון v2:
+        // - אם זה מהלך NON-CAPTURE: דלג על לקיחת הכלי שזז (זה לא הקרבה)
+        // - אם זה מהלך CAPTURE: הכלי שזז יכול להיחשב כהקרבה (כמו Rxe5+)
+        if (!isCapture && captureMove.to === movedToSquare) {
+          continue;
+        }
+
         const capturedValue = PIECE_VALUES[captureMove.captured as keyof typeof PIECE_VALUES] || 0;
-        
+
         // רק כלים בעלי ערך משמעותי (לפחות קצין)
         if (capturedValue < BRILLIANT_THRESHOLDS.MIN_SACRIFICE_VALUE) {
           continue;
         }
-        
+
         // בדוק אם לקיחת הכלי הזה היא טעות של היריב
         const takingIsMistake = this._isTakingAMistake(
           captureMove, chessAfter, fenAfter, evalAfter, isWhiteMove, topMovesAfter
         );
-        
+
         if (takingIsMistake) {
           // 🎯 זו הקרבה מבריקה! המהלך השאיר כלי תלוי שלקיחתו = טעות
           return {
@@ -141,7 +156,7 @@ export class SacrificeAnalyzer {
     } catch (e) {
       // שגיאה בניתוח - החזר תוצאה ריקה
     }
-    
+
     return this._noSacrificeResult();
   }
   
@@ -156,27 +171,28 @@ export class SacrificeAnalyzer {
     isWhiteMove: boolean,
     topMovesAfter?: Array<{ uci: string; cp: number }>
   ): boolean {
+    const captureUci = captureMove.from + captureMove.to;
+
     // שיטה 1: בדוק את topMoves - אם הלקיחה לא בין המהלכים הטובים ביותר
     if (topMovesAfter && topMovesAfter.length > 0) {
-      const captureUci = captureMove.from + captureMove.to;
       const bestMoveUci = topMovesAfter[0]?.uci?.toLowerCase();
-      
+
       // אם הלקיחה היא המהלך הטוב ביותר - זו לא הקרבה
       if (captureUci.toLowerCase() === bestMoveUci) {
         return false;
       }
-      
+
       // בדוק אם הלקיחה בכלל בין ה-topMoves
       const captureInTopMoves = topMovesAfter.find(
         tm => tm.uci.toLowerCase() === captureUci.toLowerCase()
       );
-      
+
       if (captureInTopMoves) {
         // חשב כמה היריב מפסיד אם יאכל
         const bestEval = topMovesAfter[0].cp;
         const captureEval = captureInTopMoves.cp;
         const lossForTaking = Math.abs(bestEval - captureEval);
-        
+
         // אם היריב מפסיד מספיק על הלקיחה - זו הקרבה מבריקה!
         if (lossForTaking >= BRILLIANT_THRESHOLDS.MIN_OPPONENT_LOSS_FOR_TAKING) {
           return true;
@@ -186,21 +202,21 @@ export class SacrificeAnalyzer {
         return true;
       }
     }
-    
+
     // שיטה 2: בדוק eval - אם אחרי המהלך ההערכה מאוד לטובת השחקן
     const WINNING_THRESHOLD = 300; // 3 pawns
     const playerEval = isWhiteMove ? evalAfter : -evalAfter;
-    
+
     // אם אחרי המהלך השחקן מנצח בבירור - כנראה הלקיחה תהיה טעות
     if (playerEval >= WINNING_THRESHOLD) {
       return true;
     }
-    
+
     // בדיקת מט
     if (this._checkIfLeadsToMate(evalAfter, isWhiteMove)) {
       return true;
     }
-    
+
     return false;
   }
   
