@@ -174,6 +174,8 @@ export class SacrificeAnalyzer {
   
   /**
    * בדיקה אם לקיחת הכלי התלוי היא טעות של היריב
+   *
+   * 🔧 תיקון: נוריד סף ונוסיף סימולציה של הלקיחה
    */
   private _isTakingAMistake(
     captureMove: any,
@@ -215,11 +217,47 @@ export class SacrificeAnalyzer {
       }
     }
 
-    // שיטה 2: בדוק eval - אם אחרי המהלך ההערכה מאוד לטובת השחקן
-    const WINNING_THRESHOLD = 300; // 3 pawns
+    // 🆕 שיטה 2: סמלץ את הלקיחה ובדוק אם יש איום מט או מתקפה מוחצת
+    try {
+      const testChess = new Chess(fenAfter);
+      testChess.move(captureMove);
+
+      // בדוק אם אחרי הלקיחה יש מט או שח מט קרוב
+      const responseMoves = testChess.moves({ verbose: true });
+
+      // חפש מהלכים שנותנים שח או מט
+      for (const response of responseMoves) {
+        const checkTestChess = new Chess(testChess.fen());
+        checkTestChess.move(response);
+
+        // מט מיידי = הקרבה מבריקה!
+        if (checkTestChess.isCheckmate()) {
+          return true;
+        }
+
+        // שח שמוביל למתקפה מסוכנת (יש הרבה שחים)
+        if (checkTestChess.isCheck()) {
+          const afterCheckMoves = checkTestChess.moves({ verbose: true });
+          const checkCount = afterCheckMoves.filter(m => {
+            const t = new Chess(checkTestChess.fen());
+            t.move(m);
+            return t.isCheck();
+          }).length;
+
+          if (checkCount >= 2) {
+            return true; // מתקפת שחים = כנראה הקרבה
+          }
+        }
+      }
+    } catch {
+      // שגיאה בסימולציה
+    }
+
+    // שיטה 3: בדוק eval - אם אחרי המהלך יש יתרון משמעותי
+    // 🔧 הורדנו סף מ-300 ל-100 כי גם יתרון קטן יכול להיות סימן לטרפ
+    const WINNING_THRESHOLD = 100; // 1 pawn advantage
     const playerEval = isWhiteMove ? evalAfter : -evalAfter;
 
-    // אם אחרי המהלך השחקן מנצח בבירור - כנראה הלקיחה תהיה טעות
     if (playerEval >= WINNING_THRESHOLD) {
       return true;
     }
