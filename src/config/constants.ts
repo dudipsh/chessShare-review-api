@@ -20,24 +20,40 @@ export const ACCURACY_ADJUSTMENT = {
 } as const;
 
 /**
+ * NAG (Numeric Annotation Glyph) codes for each marker type
+ * Standard PGN NAGs: $1=!, $2=?, $3=!!, $4=??, $5=!?, $6=?!
+ */
+export const MARKER_TO_NAG: Record<string, number> = {
+  book: 140,      // Custom: book move (theory)
+  brilliant: 3,   // $3 = !! (brilliant move)
+  great: 1,       // $1 = ! (good move) - great is like a very good move
+  best: 1,        // $1 = ! (good move)
+  good: 140,      // No NAG in standard, use custom 140 for "analyzed"
+  inaccuracy: 6,  // $6 = ?! (dubious move)
+  miss: 6,        // $6 = ?! (dubious move) - miss is like inaccuracy
+  mistake: 2,     // $2 = ? (mistake)
+  blunder: 4,     // $4 = ?? (blunder)
+} as const;
+
+/**
  * Move classification by centipawn loss (calibrated to Chess.com)
  * Chess.com NAGs: $1=!, $6=?!, $2=?, $4=??
  *
- * RECALIBRATED to match Chess.com's classification:
- * - Blunder: >200cp (losing ~2+ pawns, major tactical error)
- * - Mistake: 150-200cp (clear error, losing material/advantage)
- * - Miss: 100-150cp (missing good opportunity)
- * - Inaccuracy: 50-100cp (small error)
- * - Good: 0-50cp (acceptable move)
+ * 🔧 RECALIBRATED for depth 12 (fast mode):
+ * - Blunder: >250cp (losing ~2.5+ pawns, major tactical error)
+ * - Mistake: 180-250cp (clear error, losing material/advantage)
+ * - Miss: 120-180cp (missing good opportunity)
+ * - Inaccuracy: 60-120cp (small error)
+ * - Good: 0-60cp (acceptable move)
  */
 export const MOVE_CLASSIFICATION_THRESHOLDS = {
-  BEST: 15,        // 0-15cp = Best move ($1 !)
-  GREAT: 25,       // 15-25cp = Great move (checks, winning moves)
-  GOOD: 50,        // 25-50cp = Good move (no NAG in Chess.com)
-  INACCURACY: 100, // 50-100cp = Inaccuracy ($6 ?!)
-  MISS: 150,       // 100-150cp = Miss (tactical miss)
-  MISTAKE: 200,    // 150-200cp = Mistake ($2 ?)
-  BLUNDER: 200,    // 200+cp = Blunder ($4 ??)
+  BEST: 20,        // 0-20cp = Best move ($1 !) 🔧 raised for depth 12
+  GREAT: 35,       // 20-35cp = Great move (checks, winning moves)
+  GOOD: 60,        // 35-60cp = Good move (no NAG in Chess.com)
+  INACCURACY: 120, // 60-120cp = Inaccuracy ($6 ?!)
+  MISS: 180,       // 120-180cp = Miss (tactical miss)
+  MISTAKE: 250,    // 180-250cp = Mistake ($2 ?)
+  BLUNDER: 250,    // 250+cp = Blunder ($4 ??)
 } as const;
 
 /**
@@ -105,39 +121,52 @@ export const MATE_THRESHOLD = 97000;
 
 /**
  * Live evaluation config (for real-time analysis)
+ *
+ * Environment variables (for Railway):
+ * - LIVE_EVAL_DEPTH: Override MAX_DEPTH
+ * - LIVE_EVAL_MOVETIME: Override MOVETIME
  */
 export const LIVE_EVALUATION_CONFIG = {
-  MIN_DEPTH: 12,
-  MAX_DEPTH: 20,
-  TIMEOUT: 2500,
+  MIN_DEPTH: 10,
+  MAX_DEPTH: parseInt(process.env.LIVE_EVAL_DEPTH || '14', 10),  // 🔧 Fast mode (was 16)
+  TIMEOUT: 1500,
   USE_MOVETIME: true,
-  MOVETIME: 1200,
-  MIN_DEPTH_FOR_UPDATE: 10,
+  MOVETIME: parseInt(process.env.LIVE_EVAL_MOVETIME || '500', 10), // 🔧 Fast mode (was 1000)
+  MIN_DEPTH_FOR_UPDATE: 8,
 } as const;
 
 /**
  * Game review analysis config (deep analysis)
+ *
+ * Environment variables (for Railway):
+ * - ANALYSIS_DEPTH: Main analysis depth (default: 16)
+ * - ANALYSIS_MOVETIME: Time per move in ms (default: 1200)
+ * - ANALYSIS_TIMEOUT: Timeout per move in ms (default: 12000)
+ *
+ * Recommended for Railway Pro (8 vCPU):
+ * - ANALYSIS_DEPTH=18, ANALYSIS_MOVETIME=1500 (more accurate, slower)
+ * - ANALYSIS_DEPTH=14, ANALYSIS_MOVETIME=1000 (faster, less accurate)
  */
 export const ANALYSIS_CONFIG = {
-  MOVETIME: 1650,
-  TIMEOUT: 10000,
-  MIN_DEPTH_FOR_UPDATE: 10,
-  MIN_DEPTH_FOR_EVALUATION_BAR: 12,
-  STABLE_DEPTH: 14,
+  MOVETIME: parseInt(process.env.ANALYSIS_MOVETIME || '600', 10),  // 🔧 Fast mode (was 1000)
+  TIMEOUT: parseInt(process.env.ANALYSIS_TIMEOUT || '5000', 10),   // 🔧 Fast mode (was 10000)
+  MIN_DEPTH_FOR_UPDATE: 8,
+  MIN_DEPTH_FOR_EVALUATION_BAR: 10,
+  STABLE_DEPTH: parseInt(process.env.ANALYSIS_DEPTH || '12', 10),   // 🔧 Fast mode (was 14)
   USE_DEPTH: true,
-  USE_PROGRESSIVE_DEPTH: true,
-  PROGRESSIVE_DEPTH_START: 10,
+  USE_PROGRESSIVE_DEPTH: false,  // 🔧 Disabled for faster analysis
+  PROGRESSIVE_DEPTH_START: parseInt(process.env.ANALYSIS_DEPTH || '12', 10),
   PROGRESSIVE_DEPTH_INCREMENT: -1,
-  PROGRESSIVE_DEPTH_INCREMENT_EVERY: 12,
-  PROGRESSIVE_DEPTH_MAX: 16,
-  PROGRESSIVE_DEPTH_MIN: 10,
+  PROGRESSIVE_DEPTH_INCREMENT_EVERY: 15,
+  PROGRESSIVE_DEPTH_MAX: parseInt(process.env.ANALYSIS_DEPTH || '12', 10) + 2,
+  PROGRESSIVE_DEPTH_MIN: Math.max(8, parseInt(process.env.ANALYSIS_DEPTH || '12', 10) - 2),
 } as const;
 
 /**
  * Default game review configuration
  */
 export const DEFAULT_GAME_REVIEW_CONFIG: GameReviewConfig = {
-  analysisDepth: 10,
+  analysisDepth: parseInt(process.env.ANALYSIS_DEPTH || '12', 10),  // 🔧 Fast mode (was 14)
   timeoutPerMove: ANALYSIS_CONFIG.TIMEOUT,
   enableProgressCallback: true,
   timeoutMultiplierPer40Moves: 1.0,

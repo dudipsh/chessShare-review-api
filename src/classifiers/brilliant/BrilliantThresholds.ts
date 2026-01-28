@@ -8,17 +8,20 @@ export const BRILLIANT_THRESHOLDS = {
   // תנאי סף (MUST PASS) - מחמירים יותר!
   // ===========================================
   
-  /** מקסימום centipawn loss מותר למהלך מבריק - מחמיר! */
-  MAX_CP_LOSS: 15,
-  
+  /** מקסימום centipawn loss מותר למהלך מבריק רגיל (🔧 raised for depth 12) */
+  MAX_CP_LOSS: 25,
+
+  /** מקסימום cpLoss להקרבה טקטית (מלכודת) - גמיש יותר! (🔧 raised for depth 12) */
+  TACTICAL_TRAP_MAX_CP_LOSS: 60,
+
   /** מינימום שינוי בהערכה (eval swing) - מחמיר! */
-  MIN_EVAL_SWING: 200,
-  
+  MIN_EVAL_SWING: 150,
+
   /** האם המהלך צריך להיות Best או קרוב מאוד */
   REQUIRE_BEST_OR_NEAR_BEST: true,
-  
-  /** מקסימום פער מ-best move (cp) - מחמיר! */
-  MAX_GAP_FROM_BEST: 10,
+
+  /** מקסימום פער מ-best move (cp) (🔧 raised for depth 12) */
+  MAX_GAP_FROM_BEST: 20,
   
   /** מינימום פער מהמהלך השני הטוב ביותר - המהלך חייב להיות הרבה יותר טוב מהאלטרנטיבות! */
   MIN_GAP_TO_SECOND_BEST: 100,
@@ -33,8 +36,8 @@ export const BRILLIANT_THRESHOLDS = {
   /** מקסימום תמורה מיידית (לא הקרבה אם מקבל יותר) */
   MAX_IMMEDIATE_RETURN: 100, // 1 pawn
   
-  /** מינימום cp loss להיריב אם יאכל את הכלי התלוי - אם לקיחת הכלי היא טעות גדולה */
-  MIN_OPPONENT_LOSS_FOR_TAKING: 200, // אם היריב מפסיד 2+ pawns על ידי לקיחה = הקרבה מבריקה!
+  /** מינימום cp loss להיריב אם יאכל את הכלי התלוי - אם לקיחת הכלי היא טעות */
+  MIN_OPPONENT_LOSS_FOR_TAKING: 100, // אם היריב מפסיד 1+ pawn על ידי לקיחה = הקרבה מבריקה!
   
   /** מלכה להקרבה */
   QUEEN_VALUE: 900,
@@ -117,8 +120,8 @@ export const BRILLIANT_THRESHOLDS = {
   // Analysis Settings (הגדרות ניתוח)
   // ===========================================
   
-  /** עומק מינימלי לניתוח Stockfish */
-  MIN_ANALYSIS_DEPTH: 18,
+  /** עומק מינימלי לניתוח Stockfish (🔧 lowered for fast mode) */
+  MIN_ANALYSIS_DEPTH: 12,
   
   /** timeout לניתוח (ms) */
   ANALYSIS_TIMEOUT: 5000,

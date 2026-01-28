@@ -67,10 +67,22 @@ export class BrilliantDetector {
     // יכולות להיראות כ"blunder" לסטוקפיש
     // ==========================================
     const queenSacWithMateResult = this._checkQueenSacrificeWithMate(
-      move, fenBefore, fenAfter, isWhiteMove
+      move, fenBefore, fenAfter, isWhiteMove, evalBefore
     );
     if (queenSacWithMateResult.isBrilliant) {
       return queenSacWithMateResult;
+    }
+
+    // ==========================================
+    // 🆕 שלב 0.6: בדיקת הקרבה טקטית (מלכודת) - לפני בדיקת cpLoss!
+    // מהלך שמציב כלי במקום שניתן לאכול אותו, אבל אם היריב יאכל = טעות
+    // דוגמא: Qxd5!! שאם היריב אוכל Qxd5 יש פורק Nxc7+
+    // ==========================================
+    const tacticalTrapResult = this._checkTacticalTrapSacrifice(
+      move, fenBefore, fenAfter, evalBefore, evalAfter, isWhiteMove, centipawnLoss, topMovesAfter
+    );
+    if (tacticalTrapResult.isBrilliant) {
+      return tacticalTrapResult;
     }
 
     // ==========================================
@@ -82,8 +94,8 @@ export class BrilliantDetector {
     if (!isBestOrNear) {
       return this._notBrilliant('Not best or near-best move');
     }
-    
-    // תנאי 2: המהלך מחזיק טקטית
+
+    // תנאי 2: המהלך מחזיק טקטית (לא טקטיות רגילות בלבד - הקרבות טקטיות כבר נבדקו!)
     if (centipawnLoss > BRILLIANT_THRESHOLDS.MAX_CP_LOSS) {
       return this._notBrilliant(`Too much centipawn loss: ${centipawnLoss}cp`);
     }
@@ -142,7 +154,20 @@ export class BrilliantDetector {
       if (this._isFalsePositiveSacrifice(sacrificeResult, move)) {
         return this._notBrilliant('False positive sacrifice');
       }
-      
+
+      // 🔧 לא מבריק אם השחקן בעמדה מפסידה!
+      const playerEvalForSac = isWhiteMove ? evalBefore : -evalBefore;
+      if (playerEvalForSac < -200) {
+        return this._notBrilliant('Player is in losing position - sacrifice not brilliant');
+      }
+
+      // 🔧 לא מבריק אם כבר יש מט מאולץ לטובת השחקן
+      const MATE_THRESHOLD_SAC = 97000;
+      const alreadyHaveMateForSac = isWhiteMove ? evalBefore >= MATE_THRESHOLD_SAC : evalBefore <= -MATE_THRESHOLD_SAC;
+      if (alreadyHaveMateForSac) {
+        return this._notBrilliant('Already have forced mate - just finishing the game');
+      }
+
       // הקרבה של כלי תלוי שלקיחתו = טעות
       // 🔧 תיקון: לא דורשים evalSwing חיובי להקרבת כלי תלוי!
       // הרעיון: המהלך מציע כלי, ואם היריב יאכל = זו טעות גדולה
@@ -536,6 +561,316 @@ export class BrilliantDetector {
   }
 
   /**
+   * 🆕 בדיקת הקרבה טקטית (מלכודת) - Tactical Trap Sacrifice
+   *
+   * מהלך שמציב כלי במקום שניתן לאכול אותו, אבל אם היריב יאכל = טעות גדולה
+   * כי יש תגובה טקטית (פורק, שח נגלה, וכו') שמחזירה את החומר + רווח
+   *
+   * דוגמאות:
+   * - Qxd5!! - המלכה "תלויה" אבל אם Qxd5 יש Nxc7+ פורק על המלך והמלכה
+   * - Greek Gift Bxh7+! - הכלי "מוקרב" אבל יש מתקפת מט
+   */
+  private _checkTacticalTrapSacrifice(
+    move: any,
+    fenBefore: string,
+    fenAfter: string,
+    evalBefore: number,
+    evalAfter: number,
+    isWhiteMove: boolean,
+    centipawnLoss: number,
+    topMovesAfter?: Array<{ uci: string; cp: number }>
+  ): BrilliantDetectionResult {
+    // 🔧 תנאי 0: לא מבריק אם השחקן בעמדה מפסידה!
+    // שחקן שמפסיד או הולך לקבל מט לא יכול לעשות מהלך מבריק
+    const playerEval = isWhiteMove ? evalBefore : -evalBefore;
+    if (playerEval < -200) { // מפסיד יותר מ-2 חיילים
+      return this._notBrilliant('Player is in losing position - cannot be brilliant');
+    }
+
+    // 🔧 תנאי 0.5: לא מבריק אם היריב כבר הולך לקבל מט (ואני זה שמנצח)
+    // במקרה כזה, כל מהלך טוב הוא לא "מבריק" - זה פשוט לסיים את המשחק
+    const MATE_THRESHOLD = 97000;
+    const iAlreadyHaveMate = isWhiteMove ? evalBefore >= MATE_THRESHOLD : evalBefore <= -MATE_THRESHOLD;
+    if (iAlreadyHaveMate) {
+      return this._notBrilliant('Already have forced mate - just finishing the game');
+    }
+
+    // תנאי 1: cpLoss בסף המורחב לטקטיות (50cp במקום 15cp)
+    if (centipawnLoss > BRILLIANT_THRESHOLDS.TACTICAL_TRAP_MAX_CP_LOSS) {
+      return this._notBrilliant('Too much centipawn loss for tactical trap');
+    }
+
+    // תנאי 2: לא מהלך פשוט
+    if (this._isSimplePawnMove(move)) {
+      return this._notBrilliant('Simple pawn move');
+    }
+
+    // תנאי 3: לא מט שלא השתנה
+    if (this._isMateUnchanged(evalBefore, evalAfter, isWhiteMove)) {
+      return this._notBrilliant('Mate unchanged');
+    }
+
+    try {
+      const chessAfter = new Chess(fenAfter);
+      const movedToSquare = move.to;
+      const movedPiece = move.piece;
+      const movedPieceValue = PIECE_VALUES[movedPiece as keyof typeof PIECE_VALUES] || 0;
+      const capturedValue = move.captured ? PIECE_VALUES[move.captured as keyof typeof PIECE_VALUES] || 0 : 0;
+
+      // מצא לקיחות אפשריות של הכלי שזז
+      const opponentMoves = chessAfter.moves({ verbose: true });
+      const capturesOfMovedPiece = opponentMoves.filter(
+        m => m.to === movedToSquare && m.captured === movedPiece
+      );
+
+      if (capturesOfMovedPiece.length === 0) {
+        return this._notBrilliant('Moved piece is not capturable - not a trap');
+      }
+
+      // בדוק כל לקיחה אפשרית של הכלי שזז
+      for (const captureMove of capturesOfMovedPiece) {
+        // 🔧 FIX: בדוק קודם אם הכלי באמת "תלוי" או שהוא מוגן
+        // כלי מוגן שאכילתו = טעות זו לא "מלכודת מבריקה", זה פשוט כלי מוגן!
+        const capturedByValue = PIECE_VALUES[captureMove.piece as keyof typeof PIECE_VALUES] || 0;
+
+        // אם הכלי שאוכל שווה פחות מהכלי שזז = זו אכילה משתלמת, לא מלכודת
+        // (למשל: חייל אוכל פרש = לא מלכודת, היריב מרוויח)
+        if (capturedByValue < movedPieceValue) {
+          // בדוק אם יש לקיחה חזרה (הכלי מוגן)
+          const testChess = new Chess(fenAfter);
+          testChess.move(captureMove);
+          const recaptures = testChess.moves({ verbose: true }).filter(
+            (m: any) => m.to === movedToSquare && m.captured
+          );
+
+          // אם יש לקיחה חזרה = הכלי פשוט מוגן, לא מלכודת מיוחדת
+          if (recaptures.length > 0) {
+            continue; // עבור ללקיחה הבאה
+          }
+        }
+
+        // בדוק אם יש תגובה טקטית אחרי הלקיחה
+        const tacticalResponse = this._findTacticalResponse(
+          fenAfter, captureMove, isWhiteMove
+        );
+
+        if (tacticalResponse.hasResponse) {
+          // חשב את ההקרבה הנטו
+          const netSacrifice = movedPieceValue - capturedValue;
+
+          // 🔧 FIX v2: מאוזן יותר - הקרבה של לפחות חייל עם תגובה טקטית
+          if (netSacrifice >= 100) {
+            return {
+              isBrilliant: true,
+              brilliantType: BrilliantMoveType.SACRIFICE,
+              reason: `Tactical trap! ${movedPiece.toUpperCase()} appears hanging but capturing leads to ${tacticalResponse.type}`,
+              confidence: 92,
+            };
+          }
+        }
+
+        // בדוק גם דרך topMovesAfter
+        if (topMovesAfter && topMovesAfter.length > 0) {
+          const captureUci = captureMove.from + captureMove.to;
+          const bestMoveUci = topMovesAfter[0]?.uci?.toLowerCase();
+
+          // אם הלקיחה היא לא המהלך הטוב ביותר
+          if (captureUci.toLowerCase() !== bestMoveUci) {
+            const captureInTopMoves = topMovesAfter.find(
+              tm => tm.uci.toLowerCase() === captureUci.toLowerCase()
+            );
+
+            if (captureInTopMoves) {
+              const bestEval = topMovesAfter[0].cp;
+              const captureEval = captureInTopMoves.cp;
+              const lossForTaking = Math.abs(bestEval - captureEval);
+
+              // 🔧 FIX v2: קריטריונים מאוזנים יותר
+              // מבריק אם:
+              // 1. יש הקרבה (הכלי שזז שווה יותר ממה שאכל) - לפחות חייל
+              // 2. היריב מפסיד משמעותית על הלקיחה (100+ cp)
+              // 3. לא סתם כלי מוגן (ההפסד גדול מהפרש הערכים)
+              const netSacrifice = movedPieceValue - capturedValue;
+              const isRealSacrifice = netSacrifice >= 100; // לפחות חייל
+              const lossIsSignificant = lossForTaking >= BRILLIANT_THRESHOLDS.MIN_OPPONENT_LOSS_FOR_TAKING;
+
+              if (isRealSacrifice && lossIsSignificant) {
+                return {
+                  isBrilliant: true,
+                  brilliantType: BrilliantMoveType.SACRIFICE,
+                  reason: `Tactical trap! Taking the ${movedPiece.toUpperCase()} loses ${lossForTaking}cp`,
+                  confidence: 95,
+                };
+              }
+            }
+            // 🔧 FIX: הסרנו את הבלוק שמסמן מבריק רק כי הלקיחה לא ב-topMoves!
+            // זה היה הבאג - מהלך רגיל שהכלי מוגן לא צריך להיות מבריק
+          }
+        }
+      }
+    } catch {
+      // שגיאה בניתוח
+    }
+
+    return this._notBrilliant('Not a tactical trap sacrifice');
+  }
+
+  /**
+   * מצא תגובה טקטית אחרי שהיריב אוכל את הכלי
+   * חיפוש: פורק, שח נגלה, שח עם איום, מט
+   */
+  private _findTacticalResponse(
+    fenAfterMyMove: string,
+    opponentCapture: any,
+    isWhiteMove: boolean
+  ): { hasResponse: boolean; type: string } {
+    try {
+      const chessAfterCapture = new Chess(fenAfterMyMove);
+      chessAfterCapture.move(opponentCapture);
+
+      const myResponses = chessAfterCapture.moves({ verbose: true });
+
+      for (const response of myResponses) {
+        const testChess = new Chess(chessAfterCapture.fen());
+        testChess.move(response);
+
+        // מט מיידי!
+        if (testChess.isCheckmate()) {
+          return { hasResponse: true, type: 'checkmate' };
+        }
+
+        // 🔧 FIX: שח שתוקף גם כלי יקר (פורק!) - זה הקלאסי של Qxd5!! Nxc7+
+        if (testChess.isCheck()) {
+          // בדוק אם הכלי שזז תוקף עכשיו כלי יקר (מלכה, צריח)
+          const attackedByMovedPiece = this._getKnightAttacks(response.to);
+          for (const sq of attackedByMovedPiece) {
+            const pieceOnSq = testChess.get(sq as any);
+            if (pieceOnSq) {
+              const isEnemyPiece = isWhiteMove ? pieceOnSq.color === 'b' : pieceOnSq.color === 'w';
+              if (isEnemyPiece) {
+                const pieceValue = PIECE_VALUES[pieceOnSq.type as keyof typeof PIECE_VALUES] || 0;
+                // אם תוקפים מלכה או צריח = פורק מבריק!
+                if (pieceValue >= 500) {
+                  return { hasResponse: true, type: `fork! Check + attacks ${pieceOnSq.type.toUpperCase()} (${pieceValue}cp)` };
+                }
+              }
+            }
+          }
+
+          // גם שח שאוכל קצין+ הוא טוב
+          if (response.captured) {
+            const capturedValue = PIECE_VALUES[response.captured as keyof typeof PIECE_VALUES] || 0;
+            if (capturedValue >= 300) {
+              return { hasResponse: true, type: 'fork/discovered attack winning material' };
+            }
+          }
+        }
+
+        // פורק על מלכה/מלך (בלי שח) - בדוק אם המהלך תוקף מספר כלים
+        if (response.piece === 'n' || response.piece === 'b' || response.piece === 'r') {
+          const attackedPieces = this._getPiecesAttackedByKnight(testChess, response.to, !isWhiteMove);
+
+          // פורק על שני כלים יקרים
+          if (attackedPieces.length >= 2) {
+            const totalValue = attackedPieces.reduce((sum, p) =>
+              sum + (PIECE_VALUES[p as keyof typeof PIECE_VALUES] || 0), 0
+            );
+            if (totalValue >= 900) {
+              return { hasResponse: true, type: 'fork on valuable pieces' };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // שגיאה
+      console.error('[BrilliantDetector] Error in _findTacticalResponse:', e);
+    }
+
+    return { hasResponse: false, type: '' };
+  }
+
+  /**
+   * 🔧 NEW: קבל משבצות שפרש תוקף (לא תלוי בתור!)
+   */
+  private _getKnightAttacks(square: string): string[] {
+    const file = square.charCodeAt(0) - 97; // a=0, b=1, etc.
+    const rank = parseInt(square[1]) - 1;   // 1=0, 2=1, etc.
+
+    const knightMoves = [
+      [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+      [1, -2], [1, 2], [2, -1], [2, 1]
+    ];
+
+    const attacks: string[] = [];
+    for (const [df, dr] of knightMoves) {
+      const newFile = file + df;
+      const newRank = rank + dr;
+      if (newFile >= 0 && newFile <= 7 && newRank >= 0 && newRank <= 7) {
+        attacks.push(String.fromCharCode(97 + newFile) + (newRank + 1));
+      }
+    }
+    return attacks;
+  }
+
+  /**
+   * 🔧 NEW: קבל כלי יריב שפרש תוקף
+   */
+  private _getPiecesAttackedByKnight(chess: Chess, square: string, forWhite: boolean): string[] {
+    const attacks = this._getKnightAttacks(square);
+    const pieces: string[] = [];
+
+    for (const sq of attacks) {
+      const piece = chess.get(sq as any);
+      if (piece) {
+        const isTargetColor = forWhite ? piece.color === 'w' : piece.color === 'b';
+        if (isTargetColor) {
+          pieces.push(piece.type);
+        }
+      }
+    }
+    return pieces;
+  }
+
+  /**
+   * קבל משבצות שכלי תוקף (deprecated - use _getKnightAttacks)
+   */
+  private _getAttackedSquares(chess: Chess, square: string, piece: string): string[] {
+    // For knights, use the new method
+    if (piece === 'n') {
+      return this._getKnightAttacks(square);
+    }
+
+    // Fallback for other pieces (less accurate)
+    const attacked: string[] = [];
+    const moves = chess.moves({ verbose: true, square: square as any });
+    for (const move of moves) {
+      if (move.captured) {
+        attacked.push(move.to);
+      }
+    }
+    return attacked;
+  }
+
+  /**
+   * קבל כלים שנתקפים
+   */
+  private _getAttackedPieces(chess: Chess, squares: string[], forWhite: boolean): string[] {
+    const pieces: string[] = [];
+
+    for (const sq of squares) {
+      const piece = chess.get(sq as any);
+      if (piece) {
+        const isWhitePiece = piece.color === 'w';
+        if (isWhitePiece === forWhite) {
+          pieces.push(piece.type);
+        }
+      }
+    }
+
+    return pieces;
+  }
+
+  /**
    * 🆕 בדיקת הקרבת מלכה עם מט מאולץ
    * מקרה קלאסי: Qg1+! - אם הצריח יאכל, יש מט. אם המלכה תאכל, השחקן מרוויח מלכה.
    *
@@ -549,11 +884,25 @@ export class BrilliantDetector {
     move: any,
     fenBefore: string,
     fenAfter: string,
-    isWhiteMove: boolean
+    isWhiteMove: boolean,
+    evalBefore: number
   ): BrilliantDetectionResult {
     // רק מהלכי מלכה
     if (move.piece !== 'q') {
       return this._notBrilliant('Not a queen move');
+    }
+
+    // 🔧 לא מבריק אם השחקן בעמדה מפסידה!
+    const playerEval = isWhiteMove ? evalBefore : -evalBefore;
+    if (playerEval < -200) {
+      return this._notBrilliant('Player is in losing position');
+    }
+
+    // 🔧 לא מבריק אם כבר יש מט מאולץ לטובת השחקן
+    const MATE_THRESHOLD = 97000;
+    const iAlreadyHaveMate = isWhiteMove ? evalBefore >= MATE_THRESHOLD : evalBefore <= -MATE_THRESHOLD;
+    if (iAlreadyHaveMate) {
+      return this._notBrilliant('Already have forced mate');
     }
 
     try {

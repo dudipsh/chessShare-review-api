@@ -27,15 +27,33 @@ export class TopMovesClassifier {
         return this._classifyByCpLoss(adjustedCpLoss);
       }
 
-      // If penalty pushes it out of BEST range, reclassify
-      if (adjustedCpLoss > MOVE_CLASSIFICATION_THRESHOLDS.BEST) {
-        return {
-          markerType: this._getMarkerByLoss(adjustedCpLoss),
-          centipawnLoss: adjustedCpLoss,
-        };
+      // 🔧 FIX: Much more lenient for THE best move!
+      // If you played the #1 best move from Stockfish's analysis,
+      // you should get "best" unless there's a HUGE evaluation drop (100+ cp)
+      // This fixes the bug where best moves were marked as inaccuracy due to depth differences
+      const BEST_MOVE_TOLERANCE = 100; // 100cp tolerance for the best move
+
+      if (adjustedCpLoss <= BEST_MOVE_TOLERANCE) {
+        // 🔧 If cpLoss is small (< 50), it's definitely BEST
+        // If cpLoss is medium (50-100), it's still BEST but we note the loss
+        const effectiveCpLoss = Math.min(adjustedCpLoss, MOVE_CLASSIFICATION_THRESHOLDS.BEST);
+        return { markerType: MarkerType.BEST, centipawnLoss: effectiveCpLoss };
       }
 
-      return { markerType: MarkerType.BEST, centipawnLoss: adjustedCpLoss };
+      // Only if cpLoss > 100 for the "best" move do we reclassify
+      // This means something is seriously wrong with the analysis or position
+      return {
+        markerType: this._getMarkerByLoss(adjustedCpLoss),
+        centipawnLoss: adjustedCpLoss,
+      };
+    }
+
+    // 🔧 FIX: Also be more lenient for #2 move
+    if (playedMoveIndex === 1) {
+      // Second best move - if cpLoss is small, still classify as GOOD or BEST
+      if (adjustedCpLoss <= MOVE_CLASSIFICATION_THRESHOLDS.GOOD) {
+        return { markerType: MarkerType.GOOD, centipawnLoss: adjustedCpLoss };
+      }
     }
 
     // ✅ FIXED: Remove harsh rule for #3 moves - they should be treated normally
