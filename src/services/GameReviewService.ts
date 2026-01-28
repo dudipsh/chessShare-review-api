@@ -134,6 +134,10 @@ export class GameReviewService {
     let whiteMoveCount = 0;
     let blackMoveCount = 0;
 
+    // 🔧 OPTIMIZATION: Cache previous "after" analysis to reuse as "before" for next move
+    // This cuts Stockfish calls nearly in half! (fenAfter of move i = fenBefore of move i+1)
+    let cachedAnalysis: { fen: string; analysis: StockfishAnalysis } | null = null;
+
     for (let i = 0; i < positions.length; i++) {
       const position = positions[i];
       const nextPosition = positions[i + 1];
@@ -152,7 +156,9 @@ export class GameReviewService {
         });
 
         if (bookResult.isBook) {
-          // Book move - skip analysis
+          // Book move - skip analysis, also invalidate cache
+          cachedAnalysis = null;
+
           const evaluation: MoveEvaluation = {
             fen: position.fen,
             move: position.move.san,
@@ -187,14 +193,18 @@ export class GameReviewService {
           continue;
         }
 
-        // Analyze position before move
-        const rawAnalysisBefore = await this.analyzeWithRetry(
-          pool,
-          position.fen,
-          depth
-        );
-        // Normalize to White's perspective
-        const analysisBefore = normalizeAnalysisToWhite(rawAnalysisBefore, position.fen);
+        // 🔧 OPTIMIZATION: Reuse cached analysis if available (from previous move's "after")
+        let analysisBefore: StockfishAnalysis;
+        if (cachedAnalysis && cachedAnalysis.fen === position.fen) {
+          analysisBefore = cachedAnalysis.analysis;
+        } else {
+          const rawAnalysisBefore = await this.analyzeWithRetry(
+            pool,
+            position.fen,
+            depth
+          );
+          analysisBefore = normalizeAnalysisToWhite(rawAnalysisBefore, position.fen);
+        }
 
         // Get FEN after move
         const fenAfter = parsedGame.fens[i + 1];
@@ -203,6 +213,9 @@ export class GameReviewService {
         const rawAnalysisAfter = await this.analyzeWithRetry(pool, fenAfter, depth);
         // Normalize to White's perspective
         const analysisAfter = normalizeAnalysisToWhite(rawAnalysisAfter, fenAfter);
+
+        // 🔧 Cache this "after" analysis for the next move's "before"
+        cachedAnalysis = { fen: fenAfter, analysis: analysisAfter };
 
         // Classify the move
         const classification = this.classificationService.classifyMove(

@@ -8,20 +8,20 @@ export const BRILLIANT_THRESHOLDS = {
   // תנאי סף (MUST PASS) - מחמירים יותר!
   // ===========================================
   
-  /** מקסימום centipawn loss מותר למהלך מבריק רגיל (🔧 raised for depth 12) */
-  MAX_CP_LOSS: 25,
+  /** מקסימום centipawn loss מותר למהלך מבריק רגיל (🔧 slightly raised for depth 12) */
+  MAX_CP_LOSS: 20,
 
-  /** מקסימום cpLoss להקרבה טקטית (מלכודת) - גמיש יותר! (🔧 raised for depth 12) */
-  TACTICAL_TRAP_MAX_CP_LOSS: 60,
+  /** מקסימום cpLoss להקרבה טקטית (מלכודת) - גמיש יותר! */
+  TACTICAL_TRAP_MAX_CP_LOSS: 50,
 
   /** מינימום שינוי בהערכה (eval swing) - מחמיר! */
-  MIN_EVAL_SWING: 150,
+  MIN_EVAL_SWING: 200,
 
   /** האם המהלך צריך להיות Best או קרוב מאוד */
   REQUIRE_BEST_OR_NEAR_BEST: true,
 
-  /** מקסימום פער מ-best move (cp) (🔧 raised for depth 12) */
-  MAX_GAP_FROM_BEST: 20,
+  /** מקסימום פער מ-best move (cp) (🔧 slightly raised for depth 12) */
+  MAX_GAP_FROM_BEST: 15,
   
   /** מינימום פער מהמהלך השני הטוב ביותר - המהלך חייב להיות הרבה יותר טוב מהאלטרנטיבות! */
   MIN_GAP_TO_SECOND_BEST: 100,

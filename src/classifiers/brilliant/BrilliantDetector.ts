@@ -74,6 +74,16 @@ export class BrilliantDetector {
     }
 
     // ==========================================
+    // 🆕 שלב 0.55: לא מבריק אם כבר מנצח ב-300+ cp!
+    // כשאתה מנצח בהפרש ענק, כל מהלך טוב הוא "פשוט"
+    // Chess.com כמעט אף פעם לא נותן brilliant בעמדה כזו
+    // ==========================================
+    const playerEvalBefore = isWhiteMove ? evalBefore : -evalBefore;
+    if (playerEvalBefore > 300) {
+      return this._notBrilliant(`Already winning significantly (+${playerEvalBefore}cp) - no brilliant in winning positions`);
+    }
+
+    // ==========================================
     // 🆕 שלב 0.6: בדיקת הקרבה טקטית (מלכודת) - לפני בדיקת cpLoss!
     // מהלך שמציב כלי במקום שניתן לאכול אותו, אבל אם היריב יאכל = טעות
     // דוגמא: Qxd5!! שאם היריב אוכל Qxd5 יש פורק Nxc7+

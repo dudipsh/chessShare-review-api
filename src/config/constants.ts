@@ -39,21 +39,21 @@ export const MARKER_TO_NAG: Record<string, number> = {
  * Move classification by centipawn loss (calibrated to Chess.com)
  * Chess.com NAGs: $1=!, $6=?!, $2=?, $4=??
  *
- * 🔧 RECALIBRATED for depth 12 (fast mode):
- * - Blunder: >250cp (losing ~2.5+ pawns, major tactical error)
- * - Mistake: 180-250cp (clear error, losing material/advantage)
- * - Miss: 120-180cp (missing good opportunity)
- * - Inaccuracy: 60-120cp (small error)
- * - Good: 0-60cp (acceptable move)
+ * Calibrated for depth 12 (fast mode):
+ * - Blunder: >220cp
+ * - Mistake: 160-220cp
+ * - Miss: 110-160cp
+ * - Inaccuracy: 55-110cp
+ * - Good: 0-55cp
  */
 export const MOVE_CLASSIFICATION_THRESHOLDS = {
-  BEST: 20,        // 0-20cp = Best move ($1 !) 🔧 raised for depth 12
-  GREAT: 35,       // 20-35cp = Great move (checks, winning moves)
-  GOOD: 60,        // 35-60cp = Good move (no NAG in Chess.com)
-  INACCURACY: 120, // 60-120cp = Inaccuracy ($6 ?!)
-  MISS: 180,       // 120-180cp = Miss (tactical miss)
-  MISTAKE: 250,    // 180-250cp = Mistake ($2 ?)
-  BLUNDER: 250,    // 250+cp = Blunder ($4 ??)
+  BEST: 18,        // 0-18cp = Best move ($1 !)
+  GREAT: 30,       // 18-30cp = Great move
+  GOOD: 55,        // 30-55cp = Good move
+  INACCURACY: 110, // 55-110cp = Inaccuracy ($6 ?!)
+  MISS: 160,       // 110-160cp = Miss (tactical miss)
+  MISTAKE: 220,    // 160-220cp = Mistake ($2 ?)
+  BLUNDER: 220,    // 220+cp = Blunder ($4 ??)
 } as const;
 
 /**
