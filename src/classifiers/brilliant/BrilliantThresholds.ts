@@ -11,8 +11,8 @@ export const BRILLIANT_THRESHOLDS = {
   /** מקסימום centipawn loss מותר למהלך מבריק רגיל (🔧 slightly raised for depth 12) */
   MAX_CP_LOSS: 20,
 
-  /** מקסימום cpLoss להקרבה טקטית (מלכודת) - גמיש יותר! */
-  TACTICAL_TRAP_MAX_CP_LOSS: 50,
+  /** מקסימום cpLoss להקרבה טקטית (מלכודת) - 🔧 הודק ל-25 */
+  TACTICAL_TRAP_MAX_CP_LOSS: 25,
 
   /** מינימום שינוי בהערכה (eval swing) - מחמיר! */
   MIN_EVAL_SWING: 200,

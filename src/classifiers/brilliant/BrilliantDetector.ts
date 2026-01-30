@@ -639,24 +639,33 @@ export class BrilliantDetector {
 
       // בדוק כל לקיחה אפשרית של הכלי שזז
       for (const captureMove of capturesOfMovedPiece) {
-        // 🔧 FIX: בדוק קודם אם הכלי באמת "תלוי" או שהוא מוגן
-        // כלי מוגן שאכילתו = טעות זו לא "מלכודת מבריקה", זה פשוט כלי מוגן!
+        // 🔧 FIX v3: בדוק אם הכלי מוגן - תמיד! (לא רק כשהתוקף שווה פחות)
         const capturedByValue = PIECE_VALUES[captureMove.piece as keyof typeof PIECE_VALUES] || 0;
 
-        // אם הכלי שאוכל שווה פחות מהכלי שזז = זו אכילה משתלמת, לא מלכודת
-        // (למשל: חייל אוכל פרש = לא מלכודת, היריב מרוויח)
-        if (capturedByValue < movedPieceValue) {
-          // בדוק אם יש לקיחה חזרה (הכלי מוגן)
-          const testChess = new Chess(fenAfter);
-          testChess.move(captureMove);
-          const recaptures = testChess.moves({ verbose: true }).filter(
-            (m: any) => m.to === movedToSquare && m.captured
-          );
+        // בדוק אם יש לקיחה חזרה (הכלי מוגן)
+        const testChess = new Chess(fenAfter);
+        testChess.move(captureMove);
+        const recaptures = testChess.moves({ verbose: true }).filter(
+          (m: any) => m.to === movedToSquare && m.captured
+        );
 
-          // אם יש לקיחה חזרה = הכלי פשוט מוגן, לא מלכודת מיוחדת
-          if (recaptures.length > 0) {
-            continue; // עבור ללקיחה הבאה
+        // 🔧 FIX v3: אם הכלי מוגן ע"י לקיחה חזרה = לא מלכודת!
+        // זה כולל: פיל אוכל פיל עם recapture, מלכה אוכלת פרש עם recapture וכו'
+        if (recaptures.length > 0) {
+          // בדוק את ערך הכלי שלוקח חזרה
+          const recaptureValue = PIECE_VALUES[recaptures[0].piece as keyof typeof PIECE_VALUES] || 0;
+
+          // אם הלקיחה חזרה שווה או פחות מהכלי שאכל = טרייד רגיל, לא מלכודת
+          // (למשל: Bxd6 Qxd6 = פיל תמורת כלום עם recapture = לא מלכודת)
+          if (recaptureValue <= capturedByValue + 100) {
+            continue; // עבור ללקיחה הבאה - זה סתם טרייד
           }
+        }
+
+        // אם הכלי שאוכל שווה פחות = זו אכילה משתלמת ליריב, לא מלכודת
+        if (capturedByValue < movedPieceValue && recaptures.length === 0) {
+          // היריב מרוויח חומר בלקיחה ואין לנו recapture = לא מלכודת, סתם טעות שלנו
+          continue;
         }
 
         // בדוק אם יש תגובה טקטית אחרי הלקיחה
