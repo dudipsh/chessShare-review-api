@@ -127,12 +127,12 @@ export const MATE_THRESHOLD = 97000;
  * - LIVE_EVAL_MOVETIME: Override MOVETIME
  */
 export const LIVE_EVALUATION_CONFIG = {
-  MIN_DEPTH: 10,
-  MAX_DEPTH: parseInt(process.env.LIVE_EVAL_DEPTH || '14', 10),  // 🔧 Fast mode (was 16)
-  TIMEOUT: 1500,
+  MIN_DEPTH: 8,
+  MAX_DEPTH: parseInt(process.env.LIVE_EVAL_DEPTH || '12', 10),  // 🔧 Ultra-fast
+  TIMEOUT: 1000,
   USE_MOVETIME: true,
-  MOVETIME: parseInt(process.env.LIVE_EVAL_MOVETIME || '500', 10), // 🔧 Fast mode (was 1000)
-  MIN_DEPTH_FOR_UPDATE: 8,
+  MOVETIME: parseInt(process.env.LIVE_EVAL_MOVETIME || '100', 10), // 🔧 Ultra-fast
+  MIN_DEPTH_FOR_UPDATE: 6,
 } as const;
 
 /**
@@ -148,8 +148,8 @@ export const LIVE_EVALUATION_CONFIG = {
  * - ANALYSIS_DEPTH=14, ANALYSIS_MOVETIME=1000 (faster, less accurate)
  */
 export const ANALYSIS_CONFIG = {
-  MOVETIME: parseInt(process.env.ANALYSIS_MOVETIME || '600', 10),  // 🔧 Fast mode (was 1000)
-  TIMEOUT: parseInt(process.env.ANALYSIS_TIMEOUT || '5000', 10),   // 🔧 Fast mode (was 10000)
+  MOVETIME: parseInt(process.env.ANALYSIS_MOVETIME || '150', 10),  // 🔧 Ultra-fast (Chess.com speed)
+  TIMEOUT: parseInt(process.env.ANALYSIS_TIMEOUT || '2000', 10),   // 🔧 Ultra-fast
   MIN_DEPTH_FOR_UPDATE: 8,
   MIN_DEPTH_FOR_EVALUATION_BAR: 10,
   STABLE_DEPTH: parseInt(process.env.ANALYSIS_DEPTH || '12', 10),   // 🔧 Fast mode (was 14)
