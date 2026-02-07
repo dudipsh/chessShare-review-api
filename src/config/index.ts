@@ -23,9 +23,9 @@ export const config = {
     .split(',')
     .map((o) => o.trim()),
 
-  // Rate Limiting
-  rateLimitFreeDaily: parseInt(process.env.RATE_LIMIT_FREE_DAILY || '3', 10),
-  rateLimitProDaily: parseInt(process.env.RATE_LIMIT_PRO_DAILY || '50', 10),
+  // Rate Limiting (PRO is unlimited - skipped in middleware)
+  rateLimitFreeDaily: parseInt(process.env.RATE_LIMIT_FREE_DAILY || '1', 10),
+  rateLimitBasicDaily: parseInt(process.env.RATE_LIMIT_BASIC_DAILY || '5', 10),
 } as const;
 
 export type Config = typeof config;

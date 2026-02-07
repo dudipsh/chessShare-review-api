@@ -34,10 +34,17 @@ export async function rateLimiterMiddleware(
     }
 
     const { id: userId, tier } = req.user;
-    const limit = tier === 'pro' ? config.rateLimitProDaily : config.rateLimitFreeDaily;
+
+    // PRO users have unlimited reviews
+    if (tier === 'pro') {
+      next();
+      return;
+    }
+
+    const limit = tier === 'basic' ? config.rateLimitBasicDaily : config.rateLimitFreeDaily;
 
     // Check rate limit
-    const rateLimitInfo = await checkRateLimit(userId, limit);
+    const rateLimitInfo = await checkRateLimit(userId, limit, tier);
 
     // Add rate limit headers
     res.setHeader('X-RateLimit-Limit', rateLimitInfo.limit);
@@ -48,7 +55,7 @@ export async function rateLimiterMiddleware(
       rateLimitLogger.warn({ userId, tier, limit }, 'Rate limit exceeded');
       res.status(429).json({
         error: 'Rate limit exceeded',
-        message: `You have exceeded your daily limit of ${limit} reviews. ${tier === 'free' ? 'Upgrade to Pro for more reviews.' : 'Please try again tomorrow.'}`,
+        message: `You have exceeded your daily limit of ${limit} reviews. Upgrade to unlock more reviews.`,
         resetAt: rateLimitInfo.resetAt.toISOString(),
       });
       return;
@@ -67,7 +74,8 @@ export async function rateLimiterMiddleware(
 
 async function checkRateLimit(
   userId: string,
-  limit: number
+  limit: number,
+  tier: RateLimitInfo['tier']
 ): Promise<RateLimitInfo> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -81,7 +89,7 @@ async function checkRateLimit(
 
   if (cached && cached.resetAt > new Date()) {
     return {
-      tier: limit === config.rateLimitProDaily ? 'pro' : 'free',
+      tier,
       remaining: Math.max(0, limit - cached.count),
       limit,
       resetAt: tomorrow,
@@ -101,7 +109,7 @@ async function checkRateLimit(
       rateLimitLogger.error({ error }, 'Error checking rate limit');
       // On error, return full limit (fail open)
       return {
-        tier: limit === config.rateLimitProDaily ? 'pro' : 'free',
+        tier,
         remaining: limit,
         limit,
         resetAt: tomorrow,
@@ -117,7 +125,7 @@ async function checkRateLimit(
     });
 
     return {
-      tier: limit === config.rateLimitProDaily ? 'pro' : 'free',
+      tier,
       remaining: Math.max(0, limit - currentCount),
       limit,
       resetAt: tomorrow,
@@ -125,7 +133,7 @@ async function checkRateLimit(
   } catch (error) {
     rateLimitLogger.error({ error }, 'Rate limit check failed');
     return {
-      tier: limit === config.rateLimitProDaily ? 'pro' : 'free',
+      tier,
       remaining: limit,
       limit,
       resetAt: tomorrow,

@@ -85,7 +85,7 @@ async function getUserTier(userId: string): Promise<UserTier> {
     // Query user's subscription status from database
     const { data, error } = await supabase
       .from('profiles')
-      .select('subscription_tier')
+      .select('subscription_type')
       .eq('id', userId)
       .single();
 
@@ -93,7 +93,9 @@ async function getUserTier(userId: string): Promise<UserTier> {
       return 'free';
     }
 
-    return data.subscription_tier === 'pro' ? 'pro' : 'free';
+    if (data.subscription_type === 'PRO') return 'pro';
+    if (data.subscription_type === 'BASIC') return 'basic';
+    return 'free';
   } catch {
     return 'free';
   }

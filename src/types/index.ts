@@ -210,7 +210,7 @@ export interface HealthResponse {
 /**
  * User tier for rate limiting
  */
-export type UserTier = 'free' | 'pro';
+export type UserTier = 'free' | 'basic' | 'pro';
 
 /**
  * Rate limit info
